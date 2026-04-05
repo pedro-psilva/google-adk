@@ -1,0 +1,4 @@
+interface:
+  display_name: "Profile Report Automation"
+  short_description: "Automate profile report workflows"
+  default_prompt: "Use this skill to extract assessment data, normalize results, and support drafting organizational profile reports from NEOPI-R, profiler, career anchors, and cultural diagnosis inputs."

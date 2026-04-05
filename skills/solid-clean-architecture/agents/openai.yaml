@@ -1,0 +1,4 @@
+interface:
+  display_name: "Solid Clean Architecture"
+  short_description: "Apply SOLID and clean architecture"
+  default_prompt: "Use this skill to design or refactor the project with SOLID principles, clean architecture, explicit boundaries, backend/frontend separation, and framework-independent domain logic."

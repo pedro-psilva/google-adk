@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+from cryptography.fernet import Fernet
+
+
+def main() -> None:
+    print(Fernet.generate_key().decode("utf-8"))
+
+
+if __name__ == "__main__":
+    main()
