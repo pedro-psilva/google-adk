@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 import unicodedata
 from pathlib import Path
 from typing import Any
@@ -12,12 +13,22 @@ import pdfplumber
 from openpyxl import load_workbook
 from pypdf import PdfReader
 
-NEOPI_DOMAINS = [
-    "Neuroticismo",
-    "Extroversão",
-    "Abertura",
-    "Amabilidade",
-    "Conscienciosidade",
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from profile_report_automation.neopi_language import (
+    NEOPI_DOMAIN_ORDER,
+    build_friendly_neopi_synthesis_map,
+    rewrite_neopi_synthesis_text,
+)
+
+NEOPI_DOMAINS = list(NEOPI_DOMAIN_ORDER)
+
+NEOPI_SYNTHESIS_HEADINGS = [
+    ("Neuroticismo", ["NEUROTICISMO"]),
+    ("Extroversão", ["EXTROVERSÃO", "EXTROVERSAO", "EXTROVERSÃƒO"]),
+    ("Abertura", ["ABERTURA"]),
+    ("Amabilidade", ["AMABILIDADE"]),
+    ("Conscienciosidade", ["CONSCIENCIOSIDADE"]),
 ]
 
 NEOPI_FACETS = {
@@ -120,11 +131,13 @@ CULTURE_DESCRIPTIONS = {
 REPORT_FILE_PATTERNS = {
     "report_pdf": ["*Relatório de Análise de Perfil.pdf", "*Relatorio de Analise de Perfil.pdf"],
     "report_workbook": ["*Relatório de Análise de Perfil.xlsx", "*Relatorio de Analise de Perfil.xlsx"],
-    "neopi_pdf": ["*NEOPI-R*pdf"],
-    "profiler_pdf": ["*extended.pdf"],
-    "anchors_workbook": ["*IEBT Innovation.xlsx"],
+    "neopi_pdf": ["*NEOPI-R*.pdf", "*NEO PI-R*.pdf", "*NEOPI-R*pdf", "*NEO PI-R*pdf"],
+    "profiler_pdf": ["*extended.pdf", "*regular.pdf", "*extended*pdf", "*regular*pdf", "*perfil*pdf"],
+    "anchors_workbook": ["*IEBT Innovation.xlsx", "*Ancoras*.xlsx", "*Ã‚ncoras*.xlsx", "*Diagnostico*.xlsx"],
 }
 
+REQUIRED_FILE_KEYS = ("neopi_pdf", "profiler_pdf", "anchors_workbook")
+UPLOAD_MANIFEST_FILENAME = "upload-manifest.json"
 
 def normalize_text(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
@@ -166,6 +179,30 @@ def find_first_file(base_dir: Path, patterns: list[str]) -> Path | None:
     return matches[0] if matches else None
 
 
+def load_upload_manifest(base_dir: Path) -> dict[str, Path]:
+    manifest_path = base_dir / UPLOAD_MANIFEST_FILENAME
+    if not manifest_path.exists():
+        return {}
+
+    try:
+        raw_payload = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    files_by_category = raw_payload.get("files_by_category") if isinstance(raw_payload, dict) else None
+    if not isinstance(files_by_category, dict):
+        return {}
+
+    resolved_files: dict[str, Path] = {}
+    for category, relative_name in files_by_category.items():
+        if not isinstance(category, str) or not isinstance(relative_name, str):
+            continue
+        candidate = (base_dir / relative_name).resolve()
+        if candidate.exists():
+            resolved_files[category] = candidate
+    return resolved_files
+
+
 def extract_pdf_pages(path: Path, engine: str = "pypdf") -> list[str]:
     if engine == "pdfplumber":
         with pdfplumber.open(path) as pdf:
@@ -188,34 +225,68 @@ def parse_score_from_text(text: str, label: str) -> dict[str, int] | None:
     }
 
 
-def extract_neopi_synthesis(page_text: str) -> dict[str, str]:
-    headings = [
-        "NEUROTICISMO",
-        "EXTROVERSÃO",
-        "ABERTURA",
-        "AMABILIDADE",
-        "CONSCIENCIOSIDADE",
+def find_first_page_index(pages: list[str], required_terms: list[str]) -> int | None:
+    normalized_terms = [normalize_text(term) for term in required_terms]
+    for index, page_text in enumerate(pages):
+        normalized_page = normalize_text(page_text)
+        if all(term in normalized_page for term in normalized_terms):
+            return index
+    return None
+
+
+def collect_synthesis_text(pages: list[str]) -> str:
+    start_index = None
+    header_patterns = [
+        re.compile(rf"\b{variant}\b")
+        for _canonical_name, variants in NEOPI_SYNTHESIS_HEADINGS
+        for variant in variants
     ]
-    sections: dict[str, str] = {}
-    for index, heading in enumerate(headings):
-        start = page_text.find(heading)
-        if start == -1:
+    for index, page_text in enumerate(pages):
+        normalized_page = normalize_text(page_text)
+        if "sintese dos fatores do neo pi-r" in normalized_page and any(
+            pattern.search(page_text) for pattern in header_patterns
+        ):
+            start_index = index
+            break
+
+    if start_index is None:
+        return ""
+
+    collected_pages: list[str] = []
+    for page_text in pages[start_index:]:
+        normalized_page = normalize_text(page_text)
+        if "sintese dos fatores do neo pi-r" in normalized_page or any(
+            pattern.search(page_text) for pattern in header_patterns
+        ):
+            collected_pages.append(page_text)
             continue
-        content_start = start + len(heading)
-        end = len(page_text)
-        for next_heading in headings[index + 1 :]:
-            next_pos = page_text.find(next_heading, content_start)
-            if next_pos != -1:
-                end = next_pos
+        break
+
+    return " ".join(collected_pages)
+
+
+def extract_neopi_synthesis(page_text: str) -> dict[str, str]:
+    sections: dict[str, str] = {}
+    matches: list[tuple[int, int, str]] = []
+    for canonical_name, variants in NEOPI_SYNTHESIS_HEADINGS:
+        for variant in variants:
+            match = re.search(rf"\b{variant}\b", page_text, flags=re.IGNORECASE)
+            if match:
+                matches.append((match.start(), match.end(), canonical_name))
                 break
-        sections[heading.title()] = clean_text(page_text[content_start:end])
+
+    matches.sort(key=lambda item: item[0])
+    for index, (_start, end_of_heading, canonical_name) in enumerate(matches):
+        end = matches[index + 1][0] if index + 1 < len(matches) else len(page_text)
+        sections[canonical_name] = clean_text(page_text[end_of_heading:end])
     return sections
 
 
 def extract_neopi(path: Path) -> dict[str, Any]:
     pages = extract_pdf_pages(path, engine="pypdf")
-    score_page = pages[3] if len(pages) > 3 else ""
-    synthesis_page = pages[10] if len(pages) > 10 else ""
+    score_page_index = find_first_page_index(pages, ["resultados", "escores padronizados t"])
+    score_page = pages[score_page_index] if score_page_index is not None else ""
+    synthesis_page = collect_synthesis_text(pages)
 
     domains: list[dict[str, Any]] = []
     facets: list[dict[str, Any]] = []
@@ -274,12 +345,15 @@ def extract_neopi(path: Path) -> dict[str, Any]:
         ],
     ]
 
+    synthesis_by_domain = extract_neopi_synthesis(synthesis_page)
+
     return {
         "pages": len(pages),
         "domains": domains,
         "facets": facets,
         "citation_candidates": citation_candidates,
-        "synthesis_by_domain": extract_neopi_synthesis(synthesis_page),
+        "synthesis_by_domain": synthesis_by_domain,
+        "friendly_synthesis_by_domain": build_friendly_neopi_synthesis_map(synthesis_by_domain),
     }
 
 
@@ -543,6 +617,9 @@ def extract_profiler_extended(path: Path) -> dict[str, Any]:
 
     dominant_match = re.search(r"Neste momento, .* está:\s*([A-Za-zÀ-ÿ]+)\s+em", page_two)
     dominant_style = dominant_match.group(1) if dominant_match else None
+    profiler_scores = extract_profiler_scores_from_extended(page_two)
+    if not dominant_style and profiler_scores:
+        dominant_style = max(profiler_scores, key=lambda item: item["percentage"])["style"]
 
     long_form_sections = {
         "page_2_overview": page_two,
@@ -552,23 +629,175 @@ def extract_profiler_extended(path: Path) -> dict[str, Any]:
 
     return {
         "pages": len(pages),
+        "scores": profiler_scores,
         "dominant_style_from_pdf": dominant_style,
         "long_form_sections": long_form_sections,
     }
 
 
+def extract_profiler_scores_from_extended(page_text: str) -> list[dict[str, Any]]:
+    compact = clean_text(page_text)
+    score_match = re.search(
+        r"(\d+(?:[.,]\d+)?)%\s+(\d+(?:[.,]\d+)?)%\s+(\d+(?:[.,]\d+)?)%\s+(\d+(?:[.,]\d+)?)%\s+Executor\s+Comunicador\s+Planejador\s+Analista",
+        compact,
+        flags=re.IGNORECASE,
+    )
+    if not score_match:
+        return []
+
+    style_order = ["Executor", "Comunicador", "Planejador", "Analista"]
+    scores: list[dict[str, Any]] = []
+    for style_name, raw_percentage in zip(style_order, score_match.groups()):
+        percentage = float(raw_percentage.replace(",", "."))
+        scores.append(
+            {
+                "style": style_name,
+                "score": round(percentage / 100, 4),
+                "percentage": round(percentage, 2),
+            }
+        )
+    return scores
+
+
+def build_generated_report_sections(
+    *,
+    neopi_bundle: dict[str, Any],
+    profiler_bundle: dict[str, Any],
+    anchor_bundle: dict[str, Any],
+) -> dict[str, Any]:
+    dominant_style = profiler_bundle.get("dominant_style_from_pdf") or "Perfil misto"
+    top_anchors = anchor_bundle.get("career_anchors", {}).get("top_anchors", [])
+    top_cultures = anchor_bundle.get("cultural_diagnosis", {}).get("top_cultures", [])
+    extreme_domains = [item for item in neopi_bundle.get("domains", []) if item.get("citation_candidate")]
+
+    return {
+        "neopi": [
+            "O Inventario de Personalidade NEO Revisado (NEO PI-R) organiza a leitura do perfil com base nos Cinco Grandes Fatores.",
+            "A seguir, estao destacados os fatores com leitura mais relevante para a analise atual.",
+            *_build_generated_neopi_lines(neopi_bundle),
+        ],
+        "profiler": [
+            "Ferramenta para mapeamento de estilo comportamental baseada em quatro caracteristicas: Executor, Comunicador, Planejador e Analista.",
+            f"Nesse momento, apresenta o estilo: {dominant_style}",
+            build_generated_profiler_paragraph(dominant_style),
+        ],
+        "career_anchors": [
+            "O questionario de ancoras de carreira ajuda a identificar valores e motivadores profissionais mais presentes neste momento.",
+            *[
+                f"{item['name']}: {item.get('description', '')}".strip()
+                for item in top_anchors
+                if item.get("name")
+            ],
+        ],
+        "cultural_diagnosis": [
+            "O diagnostico cultural aponta os ambientes organizacionais com maior aderencia percebida pela pessoa avaliada.",
+            *[
+                f"{item['culture']}: {item.get('description', '')}".strip()
+                for item in top_cultures
+                if item.get("culture")
+            ],
+        ],
+        "conclusion": build_generated_conclusion_lines(
+            dominant_style=dominant_style,
+            top_anchors=top_anchors,
+            top_cultures=top_cultures,
+            extreme_domains=extreme_domains,
+        ),
+    }
+
+
+def _build_generated_neopi_lines(neopi_bundle: dict[str, Any]) -> list[str]:
+    synthesis_map = neopi_bundle.get("friendly_synthesis_by_domain") or neopi_bundle.get("synthesis_by_domain", {})
+    lines: list[str] = []
+    for domain_name in NEOPI_DOMAINS:
+        synthesis = clean_text(synthesis_map.get(domain_name))
+        if synthesis:
+            lines.append(f"{domain_name}: {rewrite_neopi_synthesis_text(synthesis, domain_name=domain_name)}")
+            continue
+
+        matching_domain = next(
+            (item for item in neopi_bundle.get("domains", []) if item.get("domain") == domain_name),
+            None,
+        )
+        if matching_domain:
+            lines.append(
+                f"{domain_name}: resultado classificado como {matching_domain.get('category')} com T score {matching_domain.get('t_score')}."
+            )
+    return lines
+
+
+def build_generated_profiler_paragraph(dominant_style: str) -> str:
+    summaries = {
+        "Executor": "Tende a atuar com energia para acao, senso de urgencia e disposicao para assumir desafios.",
+        "Comunicador": "Tende a se comunicar com fluidez, fortalecer relacoes e mobilizar pessoas com entusiasmo.",
+        "Planejador": "Costuma atuar com prudencia, consistencia e preferencia por previsibilidade na execucao.",
+        "Analista": "Tende a priorizar profundidade, criterio e qualidade tecnica nas entregas.",
+    }
+    return summaries.get(
+        dominant_style,
+        "O estilo predominante contribui para a leitura do comportamento no contexto profissional.",
+    )
+
+
+def build_generated_conclusion_lines(
+    *,
+    dominant_style: str,
+    top_anchors: list[dict[str, Any]],
+    top_cultures: list[dict[str, Any]],
+    extreme_domains: list[dict[str, Any]],
+) -> list[str]:
+    lines: list[str] = []
+    if dominant_style:
+        lines.append(f"Predominio do estilo {dominant_style} no contexto avaliado.")
+    if top_anchors:
+        lines.append("Ancoras mais presentes: " + ", ".join(item["name"] for item in top_anchors if item.get("name")) + ".")
+    if top_cultures:
+        lines.append(
+            "Maior aderencia cultural a "
+            + ", ".join(item["culture"] for item in top_cultures if item.get("culture"))
+            + "."
+        )
+    if extreme_domains:
+        lines.append(
+            "No NEO PI-R, destacam-se "
+            + ", ".join(
+                f"{item['domain']} {item['category']}"
+                for item in extreme_domains
+                if item.get("domain") and item.get("category")
+            )
+            + "."
+        )
+    return lines[:5]
+
+
 def build_bundle(base_dir: Path) -> dict[str, Any]:
-    files = {key: find_first_file(base_dir, patterns) for key, patterns in REPORT_FILE_PATTERNS.items()}
-    missing = [key for key, value in files.items() if value is None]
+    manifest_files = load_upload_manifest(base_dir)
+    files = {
+        key: manifest_files.get(key) or find_first_file(base_dir, patterns)
+        for key, patterns in REPORT_FILE_PATTERNS.items()
+    }
+    missing = [key for key in REQUIRED_FILE_KEYS if files.get(key) is None]
     if missing:
         raise FileNotFoundError(f"Missing expected files for keys: {', '.join(missing)}")
 
-    report_workbook = extract_report_workbook(files["report_workbook"])
+    neopi_bundle = extract_neopi(files["neopi_pdf"])
+    profiler_bundle = extract_profiler_extended(files["profiler_pdf"])
+    report_workbook = extract_report_workbook(files["report_workbook"]) if files.get("report_workbook") else None
     anchor_bundle = extract_anchor_and_culture_workbook(files["anchors_workbook"])
+    generated_sections = build_generated_report_sections(
+        neopi_bundle=neopi_bundle,
+        profiler_bundle=profiler_bundle,
+        anchor_bundle=anchor_bundle,
+    )
 
     notes = []
-    notes.extend(report_workbook.get("notes", []))
-    if report_workbook["dominant_profiler_style"] and anchor_bundle["career_anchors"]["top_anchors"]:
+    if report_workbook:
+        notes.extend(report_workbook.get("notes", []))
+    else:
+        notes.append("Report workbook not provided. Generated sections were created from the raw assessment files.")
+    if (
+        (report_workbook or {}).get("dominant_profiler_style") or profiler_bundle.get("dominant_style_from_pdf")
+    ) and anchor_bundle["career_anchors"]["top_anchors"]:
         notes.append(
             "The sample suggests a concise final report can be built from a small subset "
             "of signals: dominant profiler style, top-2 anchors, top-2 cultures, and NEO "
@@ -576,28 +805,29 @@ def build_bundle(base_dir: Path) -> dict[str, Any]:
         )
 
     person = {
-        "name": report_workbook["person"].get("name") or anchor_bundle["person"].get("name"),
-        "application_date": report_workbook["person"].get("application_date")
+        "name": (report_workbook or {}).get("person", {}).get("name") or anchor_bundle["person"].get("name"),
+        "application_date": (report_workbook or {}).get("person", {}).get("application_date")
         or anchor_bundle["person"].get("application_date"),
-        "business_unit": report_workbook["person"].get("business_unit"),
-        "demand": report_workbook["person"].get("demand"),
+        "business_unit": (report_workbook or {}).get("person", {}).get("business_unit"),
+        "demand": (report_workbook or {}).get("person", {}).get("demand"),
         "role": anchor_bundle["person"].get("role"),
     }
 
     return {
         "input_dir": str(base_dir.resolve()),
-        "files": {key: str(value.resolve()) for key, value in files.items()},
+        "files": {key: str(value.resolve()) for key, value in files.items() if value is not None},
         "person": person,
-        "neopi": extract_neopi(files["neopi_pdf"]),
+        "neopi": neopi_bundle,
         "profiler": {
-            "scores": report_workbook["profiler_scores"],
-            "dominant_style": report_workbook["dominant_profiler_style"],
-            "extended_pdf": extract_profiler_extended(files["profiler_pdf"]),
+            "scores": (report_workbook or {}).get("profiler_scores") or profiler_bundle.get("scores", []),
+            "dominant_style": (report_workbook or {}).get("dominant_profiler_style")
+            or profiler_bundle.get("dominant_style_from_pdf"),
+            "extended_pdf": profiler_bundle,
         },
         "career_anchors": anchor_bundle["career_anchors"],
         "cultural_diagnosis": anchor_bundle["cultural_diagnosis"],
         "report_template": {
-            "sections": report_workbook["sections"],
+            "sections": (report_workbook or {}).get("sections") or generated_sections,
         },
         "notes": notes,
     }

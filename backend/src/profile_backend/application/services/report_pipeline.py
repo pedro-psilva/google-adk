@@ -6,7 +6,6 @@ from profile_backend.infrastructure.bundle_gateway import ProductionBundleGatewa
 from profile_backend.infrastructure.coverage_gateway import ProductionCoverageGateway
 from profile_backend.infrastructure.drafting_gateway import ProductionDraftingGateway
 from profile_backend.infrastructure.json_storage import JsonFileStorageGateway
-from profile_backend.infrastructure.workspace_gateway import ProductionWorkspacePackageGateway
 
 
 class ReportPipelineService:
@@ -14,7 +13,6 @@ class ReportPipelineService:
         self._bundle_gateway = ProductionBundleGateway()
         self._coverage_gateway = ProductionCoverageGateway()
         self._drafting_gateway = ProductionDraftingGateway()
-        self._workspace_gateway = ProductionWorkspacePackageGateway()
         self._storage_gateway = JsonFileStorageGateway()
 
     def run(self, request: PipelineRequest):
@@ -23,7 +21,6 @@ class ReportPipelineService:
             bundle_gateway=self._bundle_gateway,
             coverage_gateway=self._coverage_gateway,
             drafting_gateway=self._drafting_gateway,
-            workspace_gateway=self._workspace_gateway,
             storage_gateway=self._storage_gateway,
         )
 
@@ -39,10 +36,6 @@ class ReportPipelineService:
         return self._drafting_gateway.build_preview(bundle, coverage)
 
     def build_output_packages(self, bundle_path: str):
-        bundle = self._storage_gateway.load(bundle_path)
-        coverage = self._coverage_gateway.analyze(bundle)
-        draft = self._drafting_gateway.build_template(bundle, coverage)
         return {
-            "google_docs": self._workspace_gateway.build_docs_package(bundle, coverage, draft),
-            "google_sheets": self._workspace_gateway.build_sheets_package(bundle, coverage, draft),
+            "message": "Workspace integration was removed from the main flow. Use the generated local XLSX instead."
         }

@@ -28,16 +28,22 @@ class ProductionBundleGateway:
                 / "extract_assessment_bundle.py"
             )
             extracted_bundle_path = output_root / "normalized-bundle.json"
-            subprocess.run(
-                [
-                    sys.executable,
-                    str(extractor_path),
-                    str(input_path),
-                    "--output",
-                    str(extracted_bundle_path),
-                ],
-                check=True,
-            )
+            try:
+                subprocess.run(
+                    [
+                        sys.executable,
+                        str(extractor_path),
+                        str(input_path),
+                        "--output",
+                        str(extracted_bundle_path),
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except subprocess.CalledProcessError as exc:
+                details = (exc.stderr or exc.stdout or str(exc)).strip()
+                raise ValueError(f"Falha ao montar a base de entrada: {details}") from exc
             return ResolvedBundle(bundle=self._storage.load(extracted_bundle_path), bundle_path=extracted_bundle_path)
 
         raise FileNotFoundError(f"Bundle input not found: {input_path}")

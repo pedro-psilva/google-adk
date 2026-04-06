@@ -20,8 +20,11 @@ class PipelineArtifacts:
     coverage_report: str
     vertex_request_preview: str
     draft_output: str
-    google_docs_package: str
-    google_sheets_package: str
+    google_docs_package: str | None = None
+    google_sheets_package: str | None = None
+    local_report_xlsx: str | None = None
+    local_report_docx: str | None = None
+    local_report_pdf: str | None = None
     live_draft: str | None = None
 
 

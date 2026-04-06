@@ -7,9 +7,10 @@ from profile_backend.application.ports import (
     CoverageGateway,
     DraftingGateway,
     JsonStorageGateway,
-    WorkspacePackageGateway,
 )
 from profile_backend.domain.models import PipelineArtifacts, PipelineRequest, PipelineResult
+from profile_report_automation.report_exports import export_local_reports
+from profile_report_automation.workbook_exports import export_filled_workbook
 
 
 def run_pipeline(
@@ -18,7 +19,6 @@ def run_pipeline(
     bundle_gateway: BundleGateway,
     coverage_gateway: CoverageGateway,
     drafting_gateway: DraftingGateway,
-    workspace_gateway: WorkspacePackageGateway,
     storage_gateway: JsonStorageGateway,
 ) -> PipelineResult:
     output_dir = Path(request.output_dir)
@@ -42,11 +42,8 @@ def run_pipeline(
         live_draft_path = None
         used_live_vertex = False
 
-    docs_package = workspace_gateway.build_docs_package(resolved_bundle.bundle, coverage, draft)
-    docs_path = storage_gateway.save(output_dir / "google-docs-package.json", docs_package)
-
-    sheets_package = workspace_gateway.build_sheets_package(resolved_bundle.bundle, coverage, draft)
-    sheets_path = storage_gateway.save(output_dir / "google-sheets-package.json", sheets_package)
+    workbook_report_path = export_filled_workbook(output_dir, resolved_bundle.bundle, coverage, draft)
+    local_reports = export_local_reports(output_dir, resolved_bundle.bundle, coverage, draft)
 
     result = PipelineResult(
         status=coverage.get("summary", {}).get("status", "unknown"),
@@ -57,8 +54,9 @@ def run_pipeline(
             coverage_report=str(coverage_path.resolve()),
             vertex_request_preview=str(preview_path.resolve()),
             draft_output=str(draft_path.resolve()),
-            google_docs_package=str(docs_path.resolve()),
-            google_sheets_package=str(sheets_path.resolve()),
+            local_report_xlsx=str(Path(workbook_report_path).resolve()),
+            local_report_docx=local_reports.get("docx"),
+            local_report_pdf=local_reports.get("pdf"),
             live_draft=str(live_draft_path.resolve()) if live_draft_path else None,
         ),
         used_live_vertex=used_live_vertex,
@@ -78,8 +76,9 @@ def _result_to_dict(result: PipelineResult) -> dict[str, object]:
             "coverage_report": result.artifacts.coverage_report,
             "vertex_request_preview": result.artifacts.vertex_request_preview,
             "draft_output": result.artifacts.draft_output,
-            "google_docs_package": result.artifacts.google_docs_package,
-            "google_sheets_package": result.artifacts.google_sheets_package,
+            "local_report_xlsx": result.artifacts.local_report_xlsx,
+            "local_report_docx": result.artifacts.local_report_docx,
+            "local_report_pdf": result.artifacts.local_report_pdf,
             "live_draft": result.artifacts.live_draft,
         },
         "used_live_vertex": result.used_live_vertex,

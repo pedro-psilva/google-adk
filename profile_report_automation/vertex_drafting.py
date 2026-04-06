@@ -72,6 +72,8 @@ def build_generation_payload(bundle: dict[str, Any], coverage: dict[str, Any]) -
         "neopi": {
             "domains": bundle.get("neopi", {}).get("domains", []),
             "facets": bundle.get("neopi", {}).get("facets", []),
+            "synthesis_by_domain": bundle.get("neopi", {}).get("synthesis_by_domain", {}),
+            "friendly_synthesis_by_domain": bundle.get("neopi", {}).get("friendly_synthesis_by_domain", {}),
         },
         "existing_sections": bundle.get("report_template", {}).get("sections", {}),
     }
@@ -81,7 +83,13 @@ def build_generation_payload(bundle: dict[str, Any], coverage: dict[str, Any]) -
         "Use linguagem corporativa, respeitosa, nao clinica e baseada apenas "
         "nos sinais fornecidos. Preserve todos os sinais obrigatorios. "
         "Nao invente fatos, nao use diagnosticos clinicos e nao force a citacao "
-        "de indicadores medios. Responda somente em JSON valido conforme o schema."
+        "de indicadores medios. Ao reescrever trechos do NEO PI-R, preserve o significado "
+        "tecnico do texto original, mas traduza para uma linguagem mais acolhedora, "
+        "organizacional e orientada a desenvolvimento. Evite rotulos duros ou expressoes "
+        "como medo, apatia, despreparo, rigidez ou hostilidade quando houver formulacoes "
+        "mais profissionais e precisas disponiveis. Prefira termos como tendencia, cautela, "
+        "seriedade, constancia, momento atual e pontos de atencao. Responda somente em JSON "
+        "valido conforme o schema."
     )
 
     user_prompt = (
@@ -92,6 +100,12 @@ def build_generation_payload(bundle: dict[str, Any], coverage: dict[str, Any]) -
         "- o tom deve ser respeitoso e organizacional\n"
         "- a secao de conclusao deve ser objetiva\n"
         "- se houver texto existente aproveitavel, pode reutilizar e reescrever\n\n"
+        "Orientacoes especificas para o NEO PI-R:\n"
+        "- use o texto original como fonte principal e nao perca o sentido tecnico\n"
+        "- transforme a linguagem para um tom profissional, claro e mais amigavel\n"
+        "- nao use palavras que soem estigmatizantes ou excessivamente duras\n"
+        "- quando houver uma formulacao sensivel, prefira uma leitura de tendencia ou contexto\n"
+        "- preserve pontos fortes, riscos e cuidados, mas com boa comunicacao\n\n"
         f"Sinais obrigatorios:\n{json.dumps(required_signals, ensure_ascii=False, indent=2)}\n\n"
         f"Sinais recomendados:\n{json.dumps(recommended_signals, ensure_ascii=False, indent=2)}\n\n"
         f"Fonte estruturada:\n{json.dumps(source_snapshot, ensure_ascii=False, indent=2)}"
