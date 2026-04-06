@@ -22,6 +22,8 @@ frontend/vite.config.d.ts
 # Runtime / generated data
 artifacts/
 backend/var/
+.packages/
+*.log
 
 # OS / editors
 .DS_Store
