@@ -1,10 +1,11 @@
 import type {
+  AssessmentUploadFiles,
+  CoverageResponse,
+  DraftResponse,
   HealthResponse,
-  OAuthStartResponse,
-  OAuthStatusResponse,
   PipelineResponse,
-  PublishResponse,
   StudioFormState,
+  UploadedSourceResponse,
 } from "../types/api";
 
 class ApiError extends Error {
@@ -23,14 +24,30 @@ function joinUrl(baseUrl: string, path: string) {
   return normalized ? `${normalized}${path}` : path;
 }
 
+export function buildDownloadUrl(baseUrl: string, filePath: string) {
+  const params = new URLSearchParams({ path: filePath });
+  return joinUrl(baseUrl, `/api/v1/files/download?${params.toString()}`);
+}
+
 async function request<T>(path: string, init?: RequestInit, baseUrl = ""): Promise<T> {
-  const response = await fetch(joinUrl(baseUrl, path), {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
+  const headers = new Headers(init?.headers ?? {});
+  if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(joinUrl(baseUrl, path), {
+      ...init,
+      headers,
+    });
+  } catch (caughtError) {
+    const message =
+      caughtError instanceof Error && caughtError.message
+        ? `Nao foi possivel conectar ao backend. Inicie a API local e tente novamente. Detalhe: ${caughtError.message}`
+        : "Nao foi possivel conectar ao backend. Inicie a API local e tente novamente.";
+    throw new ApiError(message, 0, null);
+  }
 
   const contentType = response.headers.get("content-type") ?? "";
   const payload = contentType.includes("application/json") ? await response.json() : await response.text();
@@ -41,7 +58,7 @@ async function request<T>(path: string, init?: RequestInit, baseUrl = ""): Promi
         ? String((payload as { detail: string }).detail)
         : typeof payload === "string"
           ? payload
-          : "A requisição ao backend falhou.";
+          : "A requisicao ao backend falhou.";
     throw new ApiError(message, response.status, payload);
   }
 
@@ -52,14 +69,40 @@ export function getHealth(baseUrl: string) {
   return request<HealthResponse>("/healthz", undefined, baseUrl);
 }
 
-export function getOAuthStatus(baseUrl: string, analystId: string) {
-  const params = new URLSearchParams({ analyst_id: analystId });
-  return request<OAuthStatusResponse>(`/api/v1/auth/google/status?${params.toString()}`, undefined, baseUrl);
+export function uploadAssessmentFiles(baseUrl: string, files: AssessmentUploadFiles, label?: string) {
+  const formData = new FormData();
+  if (files.neopi) {
+    formData.append("neopi_file", files.neopi, files.neopi.name);
+  }
+  if (files.profiler) {
+    formData.append("profiler_file", files.profiler, files.profiler.name);
+  }
+  if (files.anchors) {
+    formData.append("anchors_file", files.anchors, files.anchors.name);
+  }
+  if (label?.trim()) {
+    formData.append("label", label.trim());
+  }
+
+  return request<UploadedSourceResponse>(
+    "/api/v1/intake/upload",
+    {
+      method: "POST",
+      body: formData,
+    },
+    baseUrl,
+  );
 }
 
-export function startOAuth(baseUrl: string, analystId: string) {
-  const params = new URLSearchParams({ analyst_id: analystId });
-  return request<OAuthStartResponse>(`/api/v1/auth/google/start?${params.toString()}`, undefined, baseUrl);
+export function loadJsonArtifact<T>(baseUrl: string, bundlePath: string) {
+  return request<T>(
+    "/api/v1/bundles/load",
+    {
+      method: "POST",
+      body: JSON.stringify({ bundle_path: bundlePath }),
+    },
+    baseUrl,
+  );
 }
 
 export function runPipeline(baseUrl: string, form: StudioFormState) {
@@ -77,20 +120,8 @@ export function runPipeline(baseUrl: string, form: StudioFormState) {
   );
 }
 
-export function publishWorkspace(baseUrl: string, form: StudioFormState) {
-  return request<PublishResponse>(
-    "/api/v1/workspace/publish",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        analyst_id: form.analystId,
-        bundle_input: form.bundleInput,
-        output_dir: form.outputDir,
-        draft_mode: form.draftMode,
-        publish_document: form.publishDocument,
-        publish_spreadsheet: form.publishSpreadsheet,
-      }),
-    },
-    baseUrl,
-  );
-}
+export type AutomationArtifactsPayload = {
+  pipeline: PipelineResponse;
+  coverage: CoverageResponse;
+  draft: DraftResponse;
+};
