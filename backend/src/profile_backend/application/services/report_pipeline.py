@@ -34,8 +34,3 @@ class ReportPipelineService:
         bundle = self._storage_gateway.load(bundle_path)
         coverage = self._coverage_gateway.analyze(bundle)
         return self._drafting_gateway.build_preview(bundle, coverage)
-
-    def build_output_packages(self, bundle_path: str):
-        return {
-            "message": "Workspace integration was removed from the main flow. Use the generated local XLSX instead."
-        }
