@@ -35,6 +35,19 @@ export interface PipelineArtifacts {
   live_draft?: string | null;
 }
 
+export interface AdkEventSummary {
+  author: string;
+  message: string;
+}
+
+export interface AdkExecutionMetadata {
+  app_name: string;
+  session_id: string;
+  user_id: string;
+  artifact_versions: Record<string, number>;
+  events: AdkEventSummary[];
+}
+
 export interface PipelineResponse {
   status: string;
   bundle_path: string;
@@ -42,6 +55,7 @@ export interface PipelineResponse {
   used_live_vertex: boolean;
   artifacts: PipelineArtifacts;
   notes?: string[];
+  adk?: AdkExecutionMetadata;
 }
 
 export interface CoverageBucket {

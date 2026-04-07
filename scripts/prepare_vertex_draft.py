@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend" / "src"))
 
-from profile_backend.application.services.report_pipeline import ReportPipelineService
+from profile_backend.interfaces.adk.agent import adk_analysis_runner
 from profile_report_automation.bundle import save_json
 from profile_report_automation.vertex_drafting import build_template_fallback, generate_draft_with_vertex
 
@@ -25,16 +25,15 @@ def main() -> None:
     parser.add_argument("--output", help="Optional output JSON path")
     args = parser.parse_args()
 
-    service = ReportPipelineService()
-    bundle = service.load_bundle(args.bundle_path)
-    coverage = service.analyze_coverage(args.bundle_path)
+    bundle = adk_analysis_runner.load_bundle(args.bundle_path)
+    coverage = adk_analysis_runner.analyze_coverage(args.bundle_path)
 
     if args.mode == "live":
         payload = generate_draft_with_vertex(bundle, coverage)
     elif args.mode == "template":
         payload = build_template_fallback(bundle, coverage)
     else:
-        payload = service.preview_draft(args.bundle_path)
+        payload = adk_analysis_runner.preview_draft(args.bundle_path)
 
     if args.output:
         save_json(args.output, payload)
