@@ -296,9 +296,6 @@ export function WorkflowPage() {
             <p className="panel-heading__eyebrow">Entrada</p>
             <h2 className="panel-heading__title">Arquivos da avaliacao</h2>
           </div>
-          <a className="workflow-link-chip" href="/status">
-            Status tecnico
-          </a>
         </div>
 
         <div className="workflow-intake-grid workflow-intake-grid--slots">
