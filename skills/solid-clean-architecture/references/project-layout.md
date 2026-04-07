@@ -64,9 +64,7 @@ The current code can evolve like this:
 - `profile_report_automation/vertex_drafting.py` should split into:
   - application port
   - infrastructure Vertex adapter
-- `profile_report_automation/google_outputs.py` should split into:
-  - application output models
-  - infrastructure Docs/Sheets adapters
+- local export adapters should remain in infrastructure and be isolated from the core use cases
 - `app/profile_report_agent/agent.py` belongs to an interface layer
 
 ## Backend Contracts First
@@ -76,6 +74,6 @@ If a UI exists, define backend contracts before building screens:
 - bundle intake request
 - coverage response
 - draft preview response
-- publish document request
+- pipeline run request
 
 The frontend should consume these contracts through HTTP or another stable API boundary.

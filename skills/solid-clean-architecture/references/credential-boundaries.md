@@ -4,17 +4,15 @@
 
 Credentials are infrastructure concerns.
 
-Do not read environment variables, service-account files, OAuth tokens, or cloud project configuration from domain or application code.
+Do not read environment variables, service-account files, provider tokens, or cloud project configuration from domain or application code.
 
 ## What Stays Outside The Core
 
 - `GOOGLE_CLOUD_PROJECT`
 - `GOOGLE_CLOUD_LOCATION`
 - `GOOGLE_APPLICATION_CREDENTIALS`
-- OAuth client secrets
-- access tokens
-- Docs or Sheets scopes
-- service account impersonation details
+- service account files
+- provider-specific auth details
 
 ## Recommended Flow
 
@@ -25,13 +23,13 @@ Do not read environment variables, service-account files, OAuth tokens, or cloud
 
 ## UI Rule
 
-If the frontend needs Google login or document selection:
+If the frontend later needs external-provider login or document publishing:
 
 - the frontend handles user auth and consent UX
 - the backend handles server-side execution and provider adapters
 - tokens and scopes must not leak into domain logic
 
-For this project, prefer user OAuth over a shared service account when publishing analysis documents, so ownership stays with the responsible analyst.
+For the current project flow, the main delivery target is the generated local `.xlsx`, so no provider login is required in the happy path.
 
 ## Future Backend Interfaces
 

@@ -18,15 +18,15 @@ Use this skill when:
 ## Core Rules
 
 - Domain code must not depend on frameworks, SDKs, HTTP clients, cloud credentials, or file formats.
-- Application use cases orchestrate behavior but do not talk directly to Vertex AI, Google Docs, Google Sheets, or PDFs.
+- Application use cases orchestrate behavior but do not talk directly to Vertex AI, Excel workbooks, PDFs, or HTTP frameworks.
 - Infrastructure adapters implement ports and are the only place where SDKs, environment variables, auth, files, or external APIs are touched.
 - Interface layers such as CLI, ADK tools, HTTP routes, jobs, and frontend controllers only translate input and output.
 - If the project has a UI now or may have one later, backend and frontend must be separated into distinct applications, even if they stay in one monorepo.
 
 ## SOLID Applied Here
 
-- Single Responsibility: each use case does one job, such as `ExtractAssessmentBundle`, `AnalyzeCoverage`, `DraftReport`, or `AssembleWorkspaceOutputs`.
-- Open/Closed: add new output channels like Google Docs or PDF through new adapters, not by rewriting core use cases.
+- Single Responsibility: each use case does one job, such as `ExtractAssessmentBundle`, `AnalyzeCoverage`, `DraftReport`, or `AssembleLocalReportOutputs`.
+- Open/Closed: add new output channels like local XLSX, PDF, or a future external publisher through new adapters, not by rewriting core use cases.
 - Liskov Substitution: adapters for live Vertex, mocked Vertex, or local fallback drafts should satisfy the same port contract.
 - Interface Segregation: keep ports narrow, such as `DraftingGateway`, `DocumentOutputGateway`, `BundleRepository`.
 - Dependency Inversion: the application layer depends on abstractions, while infrastructure implements them.
@@ -51,7 +51,7 @@ Read [credential-boundaries.md](references/credential-boundaries.md) when workin
 
 ## Decision Rule For UI
 
-- No UI is required for the current local MVP.
+- No UI is required for the current backend workflow.
 - If a UI is added, create a separate frontend immediately instead of embedding templates or browser logic into the backend.
 - The backend should expose stable contracts first, then the frontend should consume them.
 

@@ -24,5 +24,5 @@ Copy `.env.example` to `.env` when needed.
 ## Notes
 
 - The frontend stays separate from the backend and only consumes HTTP contracts.
-- Google OAuth currently opens in a popup and the user can refresh the connection state after consent.
-- The backend still needs CORS/session hardening if this frontend is served from a different origin in production.
+- The current user flow is upload, automated analysis, and local file download.
+- The backend still needs CORS hardening if this frontend is served from a different origin in production.

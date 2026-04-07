@@ -22,7 +22,7 @@ It is especially useful when the goal is to reduce manual work in drafting, chec
 1. Run [extract_assessment_bundle.py](scripts/extract_assessment_bundle.py) on a folder that contains the source artifacts.
 2. Run [check_report_coverage.py](/C:/Users/iebt/OneDrive/Desktop/Workspace/google-adk/scripts/check_report_coverage.py) to compare required signals against the current narrative and conclusion.
 3. Run [prepare_vertex_draft.py](/C:/Users/iebt/OneDrive/Desktop/Workspace/google-adk/scripts/prepare_vertex_draft.py) to generate a Vertex request preview, a local fallback draft, or a live draft when credentials are available.
-4. Run [run_local_mvp.py](/C:/Users/iebt/OneDrive/Desktop/Workspace/google-adk/scripts/run_local_mvp.py) to produce the full local artifact set, including Google Docs and Sheets payloads.
+4. Run [run_backend_pipeline.py](/C:/Users/iebt/OneDrive/Desktop/Workspace/google-adk/scripts/run_backend_pipeline.py) to produce the full local artifact set, including the final `.xlsx` and optional `.docx` or `.pdf` exports.
 5. Read [discovery.md](references/discovery.md) when you need the current manual process, sample-specific findings, and automation opportunities.
 6. Read [architecture.md](references/architecture.md) when you need the target design for Python, Google ADK, and Vertex AI.
 7. Split the solution into three layers:
@@ -47,7 +47,7 @@ It is especially useful when the goal is to reduce manual work in drafting, chec
   - requesting normalized JSON from tools
   - selecting which section templates to fill
   - rewriting text without dropping mandatory indicators
-- Prefer Google Docs or Google Sheets as the first automated delivery path. Keep Excel or PDF replication as a compatibility layer if the business process still requires it.
+- Treat the local `.xlsx` export as the main delivery target. Keep optional `.docx` or `.pdf` outputs only as supporting artifacts.
 
 ## Quick Checks
 
@@ -62,6 +62,6 @@ It is especially useful when the goal is to reduce manual work in drafting, chec
 - [extract_assessment_bundle.py](scripts/extract_assessment_bundle.py)
 - [check_report_coverage.py](/C:/Users/iebt/OneDrive/Desktop/Workspace/google-adk/scripts/check_report_coverage.py)
 - [prepare_vertex_draft.py](/C:/Users/iebt/OneDrive/Desktop/Workspace/google-adk/scripts/prepare_vertex_draft.py)
-- [run_local_mvp.py](/C:/Users/iebt/OneDrive/Desktop/Workspace/google-adk/scripts/run_local_mvp.py)
+- [run_backend_pipeline.py](/C:/Users/iebt/OneDrive/Desktop/Workspace/google-adk/scripts/run_backend_pipeline.py)
 - [discovery.md](references/discovery.md)
 - [architecture.md](references/architecture.md)

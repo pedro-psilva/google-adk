@@ -92,7 +92,7 @@ Generate section drafts with constraints:
 
 4. Document assembler
 
-Populate Google Docs or Sheets with:
+Populate the local report outputs with:
 
 - normalized values
 - approved text sections

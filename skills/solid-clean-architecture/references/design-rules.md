@@ -16,7 +16,7 @@ Avoid:
 - environment variable access
 - file parsing details
 - HTTP request objects
-- Google Docs request payloads
+- Excel or PDF writer payloads
 
 ## Application Layer
 
@@ -46,8 +46,6 @@ This layer talks to real systems:
 
 - Vertex AI
 - Google ADK runtime concerns
-- Google Docs API
-- Google Sheets API
 - local filesystem
 - OCR or PDF readers
 

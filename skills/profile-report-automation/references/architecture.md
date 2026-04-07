@@ -38,10 +38,10 @@ Implement tools first. Example tools:
 - input: normalized JSON plus drafting rules
 - output: section drafts in structured JSON
 
-4. `assemble_google_doc`
+4. `assemble_local_report_exports`
 
 - input: approved sections and chart data
-- output: Google Doc or Google Sheet populated for review
+- output: local `.xlsx` plus optional `.docx` and `.pdf` files for review
 
 5. `quality_check_report`
 
@@ -57,7 +57,7 @@ Use the root ADK agent mainly for orchestration:
 3. rule selection
 4. draft generation
 5. QA
-6. document assembly
+6. local artifact assembly
 
 The agent should not parse spreadsheets or PDFs directly in prompts if a Python tool can do it deterministically.
 
@@ -75,7 +75,7 @@ The agent should not parse spreadsheets or PDFs directly in prompts if a Python 
 
 - Vertex AI drafting prompt with strict output schema
 - tone and citation QA pass
-- Google Docs or Sheets output for review
+- local workbook filling and local report export for review
 - local fallback draft so the downstream pipeline can be tested before cloud credentials are configured
 
 ### Phase 3

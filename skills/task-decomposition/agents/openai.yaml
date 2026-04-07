@@ -1,0 +1,4 @@
+interface:
+  display_name: "Task Decomposition"
+  short_description: "Break large projects into safe, verifiable steps."
+  default_prompt: "Use this skill to break a large implementation into smaller steps with explicit checkpoints and validation."
