@@ -3,8 +3,6 @@ import type { ChangeEvent } from "react";
 
 import { Badge } from "../../atoms/badge/Badge";
 import { Button } from "../../atoms/button/Button";
-import { Select } from "../../atoms/select/Select";
-import { FormField } from "../../molecules/form-field/FormField";
 import { MetricCard } from "../../molecules/metric-card/MetricCard";
 import {
   buildDownloadUrl,
@@ -15,21 +13,13 @@ import {
 import type {
   AssessmentUploadFiles,
   AssessmentUploadSlotId,
+  BundleResponse,
   CoverageResponse,
-  DraftMode,
   DraftResponse,
   PipelineResponse,
-  StudioFormState,
   UploadedAssessmentFile,
   UploadedSourceResponse,
 } from "../../shared/types/api";
-
-const initialForm: StudioFormState = {
-  apiBaseUrl: import.meta.env.DEV ? "" : (import.meta.env.VITE_API_BASE_URL ?? ""),
-  bundleInput: "",
-  outputDir: "",
-  draftMode: "preview",
-};
 
 const initialSelectedFiles: AssessmentUploadFiles = {
   neopi: null,
@@ -75,6 +65,67 @@ const intakeSlots = [
   hint: string;
 }>;
 
+type NeopiAttentionItem = {
+  id: string;
+  name: string;
+  category: string;
+  detail: string;
+};
+
+const negativeNeopiDomainRules: Record<string, { categories: string[]; detail: string }> = {
+  Neuroticismo: {
+    categories: ["muito alto"],
+    detail: "Pede atenção especial a pressão, frustração e autorregulação em contextos mais exigentes.",
+  },
+  Amabilidade: {
+    categories: ["muito baixo"],
+    detail: "Pede atenção ao equilíbrio entre assertividade, escuta e abertura ao outro.",
+  },
+  Conscienciosidade: {
+    categories: ["muito baixo"],
+    detail: "Pede atenção a preparo, planejamento e avaliação antes da ação.",
+  },
+};
+
+const negativeNeopiFacetRules: Record<string, { categories: string[]; detail: string }> = {
+  Raiva: {
+    categories: ["muito alto"],
+    detail: "Merece atenção à forma de expressar desconforto e irritação em situações de tensão.",
+  },
+  Depressão: {
+    categories: ["muito alto"],
+    detail: "Merece atenção a sinais de desânimo e queda de energia diante de frustrações.",
+  },
+  Impulsividade: {
+    categories: ["muito alto"],
+    detail: "Merece atenção ao ritmo de resposta e à ponderação antes de agir.",
+  },
+  Vulnerabilidade: {
+    categories: ["muito alto"],
+    detail: "Merece atenção à resposta emocional sob pressão ou sobrecarga.",
+  },
+  Complacência: {
+    categories: ["muito baixo"],
+    detail: "Pede atenção à flexibilidade em conflitos e ao tom das interações.",
+  },
+  Modéstia: {
+    categories: ["muito baixo"],
+    detail: "Pede atenção ao equilíbrio entre autoconfiança, escuta e percepção do outro.",
+  },
+  Competência: {
+    categories: ["muito baixo"],
+    detail: "Pede atenção à percepção de preparo e segurança para decidir.",
+  },
+  "Senso de dever": {
+    categories: ["muito baixo"],
+    detail: "Pede atenção à constância com responsabilidades e combinados.",
+  },
+  Ponderação: {
+    categories: ["muito baixo"],
+    detail: "Pede atenção à análise de cenários e riscos antes da ação.",
+  },
+};
+
 function formatSectionLabel(sectionName: string) {
   return sectionLabels[sectionName] ?? sectionName;
 }
@@ -100,20 +151,71 @@ function isCurrentSelectionUploaded(file: File | null, uploadedFile: UploadedAss
   return uploadedFile.name === file.name && uploadedFile.size_bytes === file.size;
 }
 
+function normalizeCategory(category: string | undefined) {
+  return (category ?? "").trim().toLowerCase();
+}
+
+function buildNeopiAttentionItems(bundle: BundleResponse | null): NeopiAttentionItem[] {
+  if (!bundle?.neopi) {
+    return [];
+  }
+
+  const items: NeopiAttentionItem[] = [];
+
+  for (const domain of bundle.neopi.domains ?? []) {
+    const name = domain.domain?.trim();
+    const category = domain.category?.trim();
+    if (!name || !category) {
+      continue;
+    }
+
+    const rule = negativeNeopiDomainRules[name];
+    if (!rule || !rule.categories.includes(normalizeCategory(category))) {
+      continue;
+    }
+
+    items.push({
+      id: `domain-${name}`,
+      name,
+      category,
+      detail: rule.detail,
+    });
+  }
+
+  for (const facet of bundle.neopi.facets ?? []) {
+    const name = facet.facet?.trim();
+    const category = facet.category?.trim();
+    if (!name || !category) {
+      continue;
+    }
+
+    const rule = negativeNeopiFacetRules[name];
+    if (!rule || !rule.categories.includes(normalizeCategory(category))) {
+      continue;
+    }
+
+    items.push({
+      id: `facet-${name}`,
+      name,
+      category,
+      detail: rule.detail,
+    });
+  }
+
+  return items;
+}
+
 export function WorkflowPage() {
-  const [form, setForm] = useState<StudioFormState>(initialForm);
   const [coverage, setCoverage] = useState<CoverageResponse | null>(null);
   const [draft, setDraft] = useState<DraftResponse | null>(null);
+  const [bundle, setBundle] = useState<BundleResponse | null>(null);
   const [pipelineResult, setPipelineResult] = useState<PipelineResponse | null>(null);
   const [uploadedSource, setUploadedSource] = useState<UploadedSourceResponse | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<AssessmentUploadFiles>(initialSelectedFiles);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [lastAction, setLastAction] = useState("Aguardando arquivos");
   const [error, setError] = useState<string | null>(null);
-
-  function updateField<K extends keyof StudioFormState>(field: K, value: StudioFormState[K]) {
-    setForm((current) => ({ ...current, [field]: value }));
-  }
+  const apiBaseUrl = import.meta.env.DEV ? "" : (import.meta.env.VITE_API_BASE_URL ?? "");
 
   async function runAction<T>(actionKey: string, callback: () => Promise<T>): Promise<T | null> {
     setBusyAction(actionKey);
@@ -147,6 +249,7 @@ export function WorkflowPage() {
     }));
     setCoverage(null);
     setDraft(null);
+    setBundle(null);
     setPipelineResult(null);
     setError(null);
     setLastAction("Arquivos atualizados");
@@ -159,62 +262,35 @@ export function WorkflowPage() {
     }));
     setCoverage(null);
     setDraft(null);
+    setBundle(null);
     setPipelineResult(null);
     setError(null);
     setLastAction("Arquivos atualizados");
   }
 
-  async function handleUploadFiles() {
+  async function handleRunAutomation() {
     const missingSlots = intakeSlots.filter((slot) => !selectedFiles[slot.id]).map((slot) => slot.label);
     if (missingSlots.length) {
-      setError(`Selecione os 3 arquivos antes de enviar. Faltando: ${missingSlots.join(", ")}.`);
-      setLastAction("Upload com falha");
-      return;
-    }
-
-    const payload = await runAction("Arquivos enviados", () => uploadAssessmentFiles(form.apiBaseUrl, selectedFiles));
-    if (!payload) {
-      return;
-    }
-
-    setUploadedSource(payload);
-    setForm((current) => ({
-      ...current,
-      bundleInput: payload.bundle_input,
-      outputDir: payload.output_dir,
-    }));
-    setCoverage(null);
-    setDraft(null);
-    setPipelineResult(null);
-  }
-
-  async function handleRunAutomation() {
-    if (!form.bundleInput) {
-      setError("Envie os arquivos da avaliacao antes de gerar a analise.");
-      setLastAction("Analise bloqueada");
-      return;
-    }
-
-    const hasPendingUpload = intakeSlots.some((slot) => {
-      const selectedFile = selectedFiles[slot.id];
-      const uploadedFile = findUploadedSlotFile(uploadedSource?.files ?? [], slot.category);
-      return !isCurrentSelectionUploaded(selectedFile, uploadedFile);
-    });
-
-    if (hasPendingUpload) {
-      setError("Os arquivos foram alterados. Clique em Enviar arquivos para atualizar a base antes de gerar a analise.");
+      setError(`Selecione os 3 arquivos obrigatorios antes de gerar a analise. Faltando: ${missingSlots.join(", ")}.`);
       setLastAction("Analise bloqueada");
       return;
     }
 
     const payload = await runAction("Analise gerada", async () => {
-      const pipeline = await runPipeline(form.apiBaseUrl, form);
-      const [coveragePayload, draftPayload] = await Promise.all([
-        loadJsonArtifact<CoverageResponse>(form.apiBaseUrl, pipeline.artifacts.coverage_report),
-        loadJsonArtifact<DraftResponse>(form.apiBaseUrl, pipeline.artifacts.draft_output),
+      const uploaded = await uploadAssessmentFiles(apiBaseUrl, selectedFiles);
+      const pipeline = await runPipeline(apiBaseUrl, {
+        bundleInput: uploaded.bundle_input,
+        outputDir: uploaded.output_dir,
+      });
+      const [bundlePayload, coveragePayload, draftPayload] = await Promise.all([
+        loadJsonArtifact<BundleResponse>(apiBaseUrl, pipeline.bundle_path),
+        loadJsonArtifact<CoverageResponse>(apiBaseUrl, pipeline.artifacts.coverage_report),
+        loadJsonArtifact<DraftResponse>(apiBaseUrl, pipeline.artifacts.draft_output),
       ]);
 
       return {
+        uploaded,
+        bundlePayload,
         pipeline,
         coveragePayload,
         draftPayload,
@@ -224,6 +300,8 @@ export function WorkflowPage() {
       return;
     }
 
+    setUploadedSource(payload.uploaded);
+    setBundle(payload.bundlePayload);
     setPipelineResult(payload.pipeline);
     setCoverage(payload.coveragePayload);
     setDraft(payload.draftPayload);
@@ -235,34 +313,31 @@ export function WorkflowPage() {
     coverage?.required_signals.filter((item) => item.importance === "required" && !item.coverage.conclusion.covered) ?? [];
   const mediumMentions = coverage?.possible_medium_mentions ?? [];
   const localXlsxPath = pipelineResult?.artifacts.local_report_xlsx ?? null;
+  const attentionItems = buildNeopiAttentionItems(bundle);
   const selectedCount = intakeSlots.filter((slot) => selectedFiles[slot.id]).length;
-  const pendingSlotLabels = intakeSlots.filter((slot) => !selectedFiles[slot.id]).map((slot) => slot.label);
-  const hasPendingUpload = intakeSlots.some((slot) => {
-    const selectedFile = selectedFiles[slot.id];
-    const uploadedFile = findUploadedSlotFile(uploadedSource?.files ?? [], slot.category);
-    return !isCurrentSelectionUploaded(selectedFile, uploadedFile);
-  });
-  const canUpload = pendingSlotLabels.length === 0;
-  const canRunAutomation = Boolean(form.bundleInput) && !hasPendingUpload;
+  const canRunAutomation = selectedCount === intakeSlots.length;
+  const uploadedSelectionMatches =
+    uploadedSource?.files.length === intakeSlots.length &&
+    intakeSlots.every((slot) => {
+      const selectedFile = selectedFiles[slot.id];
+      const uploadedFile = findUploadedSlotFile(uploadedSource?.files ?? [], slot.category);
+      return isCurrentSelectionUploaded(selectedFile, uploadedFile);
+    });
 
   return (
     <div className="page-stack">
       <section className="surface surface--hero workflow-hero workflow-hero--compact">
         <div className="workflow-hero__content">
           <p className="workflow-hero__eyebrow">Analise de perfil</p>
-          <h1 className="workflow-hero__title">Selecione os 3 arquivos e devolva a planilha final.</h1>
+          <h1 className="workflow-hero__title">Selecione os 3 arquivos e gere a planilha final.</h1>
           <p className="workflow-hero__description">
-            Escolha um arquivo em cada card, envie a base e gere o `.xlsx` preenchido para revisao final.
+            Escolha um arquivo em cada card e a geracao cuida do envio e da analise em sequencia.
           </p>
 
           <div className="workflow-hero__badges">
             <Badge tone="neutral">Fluxo por arquivos</Badge>
-            <Badge tone={uploadedSource && !hasPendingUpload ? "success" : canUpload ? "neutral" : "warning"}>
-              {uploadedSource && !hasPendingUpload
-                ? "Base pronta"
-                : canUpload
-                  ? "Pronto para envio"
-                  : `${selectedCount}/3 selecionados`}
+            <Badge tone={uploadedSelectionMatches ? "success" : canRunAutomation ? "neutral" : "warning"}>
+              {uploadedSelectionMatches ? "Base atualizada" : canRunAutomation ? "Pronto para gerar" : `${selectedCount}/3 selecionados`}
             </Badge>
             <Badge tone={localXlsxPath ? "success" : "neutral"}>{localXlsxPath ? "Excel pronto" : "Aguardando geracao"}</Badge>
           </div>
@@ -273,7 +348,7 @@ export function WorkflowPage() {
             label="Arquivos"
             value={String(selectedCount)}
             detail="Cada card recebe um documento especifico da avaliacao."
-            tone={canUpload ? "success" : "warning"}
+            tone={canRunAutomation ? "success" : "warning"}
           />
           <MetricCard
             label="Pendencias"
@@ -304,18 +379,14 @@ export function WorkflowPage() {
             const uploadedFile = findUploadedSlotFile(uploadedSource?.files ?? [], slot.category);
             const isUploaded = isCurrentSelectionUploaded(selectedFile, uploadedFile);
             const badgeTone = isUploaded || (!selectedFile && uploadedFile) ? "success" : selectedFile ? "neutral" : "warning";
-            const badgeLabel = isUploaded ? "pronto" : selectedFile ? "selecionado" : uploadedFile ? "enviado" : "pendente";
+            const badgeLabel = isUploaded ? "confirmado" : selectedFile ? "selecionado" : uploadedFile ? "recebido" : "pendente";
             const headline = selectedFile?.name ?? uploadedFile?.name ?? slot.hint;
             const meta = selectedFile
               ? formatFileSize(selectedFile.size)
               : uploadedFile
                 ? formatFileSize(uploadedFile.size_bytes)
                 : slot.accept.toUpperCase().replace(".", "");
-            const actionCopy = isUploaded
-              ? "Clique para trocar o arquivo."
-              : selectedFile
-                ? "Clique para confirmar no envio."
-                : "Clique para selecionar o arquivo.";
+            const actionCopy = isUploaded ? "Clique para trocar o arquivo." : "Clique para selecionar o arquivo.";
 
             return (
               <div key={slot.id} className="workflow-intake-slot">
@@ -355,40 +426,19 @@ export function WorkflowPage() {
           })}
         </div>
 
-        <div className="workflow-form-grid">
-          <FormField label="Modo" hint="Rascunho rapido ou geracao completa com IA.">
-            <Select value={form.draftMode} onChange={(event) => updateField("draftMode", event.target.value as DraftMode)}>
-              <option value="preview">Rascunho rapido</option>
-              <option value="live">IA completa</option>
-            </Select>
-          </FormField>
-        </div>
-
         <div className="workflow-actions">
-          <Button
-            variant="secondary"
-            busy={busyAction === "Arquivos enviados"}
-            disabled={!canUpload}
-            onClick={() => void handleUploadFiles()}
-          >
-            Enviar arquivos
-          </Button>
           <Button busy={busyAction === "Analise gerada"} disabled={!canRunAutomation} onClick={() => void handleRunAutomation()}>
             Gerar analise
           </Button>
         </div>
 
-        {!canUpload ? (
-          <p className="empty-state">Selecione os 3 arquivos obrigatorios para habilitar o envio.</p>
-        ) : null}
-
-        {uploadedSource && hasPendingUpload ? (
-          <p className="empty-state">Voce alterou um ou mais arquivos. Clique em Enviar arquivos para atualizar a base ativa.</p>
+        {!canRunAutomation ? (
+          <p className="empty-state">Selecione os 3 arquivos obrigatorios para habilitar a geracao.</p>
         ) : null}
 
         {uploadedSource ? (
           <div className="workflow-file-group">
-            <p className="workflow-file-group__label">Base atual pronta para analise</p>
+            <p className="workflow-file-group__label">Ultima base enviada na geracao</p>
             <div className="workflow-file-list">
               {uploadedSource.files.map((file) => (
                 <span key={`${file.name}-${file.size_bytes}`} className="workflow-file-chip workflow-file-chip--uploaded">
@@ -464,6 +514,23 @@ export function WorkflowPage() {
                   <p className="empty-state">Nenhum indicador medio destacado para revisao.</p>
                 )}
               </article>
+
+              <article className="workflow-review-card">
+                <h3>Pontos de atencao</h3>
+                {attentionItems.length ? (
+                  <ul className="workflow-review-list workflow-review-list--attention">
+                    {attentionItems.map((item) => (
+                      <li key={item.id}>
+                        <strong>{item.name}</strong>
+                        <span>{item.category}</span>
+                        <p>{item.detail}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="empty-state">Nenhum ponto extremo negativo sinalizado no NEO PI-R.</p>
+                )}
+              </article>
             </div>
           ) : (
             <p className="empty-state">Depois da geracao, esta area mostra o que precisa entrar no texto final.</p>
@@ -519,7 +586,7 @@ export function WorkflowPage() {
               <div className="workflow-link-row">
                 <a
                   className="workflow-link-chip"
-                  href={buildDownloadUrl(form.apiBaseUrl, localXlsxPath)}
+                  href={buildDownloadUrl(apiBaseUrl, localXlsxPath)}
                   target="_blank"
                   rel="noreferrer"
                 >

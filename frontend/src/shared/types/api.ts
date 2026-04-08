@@ -1,4 +1,3 @@
-export type DraftMode = "preview" | "live";
 export type JsonCellValue = string | number | boolean | null;
 export type AssessmentUploadSlotId = "neopi" | "profiler" | "anchors";
 export type AssessmentUploadFiles = Record<AssessmentUploadSlotId, File | null>;
@@ -123,9 +122,28 @@ export interface DraftResponse {
   qa_notes?: string[];
 }
 
-export interface StudioFormState {
-  apiBaseUrl: string;
+export interface PipelineRunInput {
   bundleInput: string;
   outputDir: string;
-  draftMode: DraftMode;
+}
+
+export interface NeopiDomainResult {
+  domain?: string;
+  category?: string;
+  t_score?: number;
+}
+
+export interface NeopiFacetResult {
+  facet?: string;
+  domain?: string;
+  category?: string;
+  t_score?: number;
+}
+
+export interface BundleResponse {
+  person?: Record<string, unknown>;
+  neopi?: {
+    domains?: NeopiDomainResult[];
+    facets?: NeopiFacetResult[];
+  };
 }

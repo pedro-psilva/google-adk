@@ -3,8 +3,8 @@ import type {
   CoverageResponse,
   DraftResponse,
   HealthResponse,
+  PipelineRunInput,
   PipelineResponse,
-  StudioFormState,
   UploadedSourceResponse,
 } from "../types/api";
 
@@ -105,15 +105,14 @@ export function loadJsonArtifact<T>(baseUrl: string, bundlePath: string) {
   );
 }
 
-export function runPipeline(baseUrl: string, form: StudioFormState) {
+export function runPipeline(baseUrl: string, input: PipelineRunInput) {
   return request<PipelineResponse>(
     "/api/v1/pipeline/run",
     {
       method: "POST",
       body: JSON.stringify({
-        bundle_input: form.bundleInput,
-        output_dir: form.outputDir,
-        draft_mode: form.draftMode,
+        bundle_input: input.bundleInput,
+        output_dir: input.outputDir,
       }),
     },
     baseUrl,
