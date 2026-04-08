@@ -53,6 +53,22 @@ _COMMON_REWRITES = [
         r"reagir com hostilidade ou irritação",
         "responder com irritação ou reações mais intensas",
     ),
+    (
+        r"pode reagir sem ponderar as respectivas consequências dos seus atos e tomar decisões de maneira impulsiva, sendo possível que se arrependa posteriormente",
+        "pode reagir com rapidez e beneficiar-se de mais tempo para ponderar decisões e consequências antes de agir",
+    ),
+    (
+        r"pode sentir maior desânimo para persistir e prosseguir com os projetos e atividades que está desenvolvendo",
+        "pode sentir redução de energia para sustentar projetos e atividades em andamento",
+    ),
+    (
+        r"gerenciar a frustração e a impulsividade",
+        "lidar com frustrações e organizar o ritmo de resposta",
+    ),
+    (
+        r"Assim, atualmente, pode-se perceber pouco preparado para cumprir as exigências de sua rotina e, mesmo se sentido pouco confiante para tomar decisões, deve se ater para que, quando o fizer, não seja de maneira precipitada sem a devida avaliação dos fatores e das consequências\.",
+        "Assim, atualmente, pode beneficiar-se de maior preparo para cumprir as exigências da rotina e de mais segurança para tomar decisões com avaliação adequada dos fatores e das consequências.",
+    ),
     (r"\breações hostis\b", "reações mais contundentes"),
     (r"\breações ríspidas\b", "reações mais diretas"),
     (r"\btransparecer uma imagem apreensiva\b", "transmitir uma imagem de cautela"),
@@ -69,6 +85,9 @@ _COMMON_REWRITES = [
     (r"\bdespreparad[oa]\b", "menos seguro(a) quanto ao próprio preparo"),
     (r"\bdisplicente\b", "menos atento(a)"),
     (r"\bmedo\b", "receio"),
+    (r"\bpouco preparado\b", "com necessidade de maior preparo"),
+    (r"\bpouco confiante\b", "com necessidade de reforçar a segurança na tomada de decisão"),
+    (r"\bde maneira precipitada\b", "sem a devida estrutura de análise"),
 ]
 
 _DOMAIN_REWRITES = {
@@ -79,11 +98,11 @@ _DOMAIN_REWRITES = {
         ),
         (
             r"Concomitantemente, diante de alguma situação que não vá ao encontro de suas expectativas, pode demonstrar sua frustração e também ter reações mais contundentes quanto ao modo de ser ou se comunicar com as demais pessoas\.",
-            "Quando situações fogem das expectativas, pode demonstrar frustração e responder de maneira mais contundente na comunicação.",
+            "Quando situações fogem das expectativas, pode demonstrar maior sensibilidade à frustração e comunicar o desconforto de forma mais enfática.",
         ),
         (
             r"Além disso, tende a transmitir uma imagem de cautela e muito preocupada quando em momentos de pressão, podendo não demonstrar a racionalidade habitual ao tomar decisões\.",
-            "Em momentos de pressão, pode transmitir maior tensão e demandar mais tempo para organizar decisões com a mesma racionalidade habitual.",
+            "Em momentos de pressão, pode apresentar sinais mais evidentes de tensão e demandar mais tempo para organizar decisões com a mesma racionalidade habitual.",
         ),
     ],
     "Extroversão": [
@@ -132,14 +151,34 @@ _DOMAIN_REWRITES = {
             "Nas atividades do dia a dia, adota uma postura equilibrada entre atenção às próprias responsabilidades e disposição para cooperar com as demais pessoas, ponderando conforme o momento.",
         ),
         (
+            r"Conforme a situação na qual está inserido\(a\), tende a expressar de maneira mais franca ou, então, de forma mais moderada seu ponto de vista\.",
+            "Conforme a situação na qual está inserido, pode alternar entre uma comunicação mais objetiva e outra mais moderada, conforme o contexto.",
+        ),
+        (
             r"Além disso, nas interações sociais não tem dificuldade para confiar na intencionalidade das pessoas de seu convívio, contudo acaba adotando em alguns momentos uma postura mais cética e cautelosa conforme avalia cada contexto\.",
             "Além disso, nas interações sociais não tem dificuldade para confiar nas intenções das pessoas de seu convívio, embora em alguns momentos adote uma postura mais criteriosa e cautelosa conforme avalia cada contexto.",
+        ),
+        (
+            r"Mesmo assim, na interação social não tem receio de demonstrar a valia que sente sobre si, o que pode levar a demonstrar uma postura de superioridade quanto às próprias competências e capacidades\. Desta forma, pode vir a transmitir uma imagem de presunção aos demais\.",
+            "Mesmo assim, na interação social tende a reconhecer e comunicar com segurança suas competências e capacidades, o que pede atenção ao equilíbrio entre autoconfiança, escuta e abertura ao outro.",
         ),
     ],
     "Conscienciosidade": [
         (
+            r"Prefere agir e tomar decisões com espontaneidade, e tende a não ter dificuldade para lidar com cenários imprevisíveis\.",
+            "Pode atuar com espontaneidade e se adaptar a cenários imprevisíveis, especialmente em contextos mais dinâmicos.",
+        ),
+        (
+            r"Pode não investir muita energia e tempo na análise dos fatos antes de agir, tampouco buscar informações importantes para o trabalho\.",
+            "Pode beneficiar-se de dedicar mais tempo à análise dos fatos e à busca de informações importantes para o trabalho antes de agir.",
+        ),
+        (
+            r"Assim, atualmente, pode-se perceber pouco preparado para cumprir as exigências de sua rotina e, mesmo se sentido pouco confiante para tomar decisões, deve se ater para que, quando o fizer, não seja de maneira precipitada sem a devida avaliação dos fatores e das consequências\.",
+            "Assim, atualmente, pode beneficiar-se de mais estrutura e preparo para cumprir as exigências da rotina e para tomar decisões com maior segurança e avaliação de cenários.",
+        ),
+        (
             r"Tende a não investir muita energia e tempo em buscar informações importantes no preparo para o trabalho e, atualmente, pode se perceber pouco preparado para cumprir as exigências de sua rotina e pouco confiante para tomar decisões\.",
-            "Tende a não investir muito tempo em buscar informações no preparo para o trabalho e, atualmente, pode se perceber menos confiante para atender às exigências da rotina e para tomar decisões.",
+            "Tende a não investir muito tempo em buscar informações no preparo para o trabalho e, atualmente, pode beneficiar-se de maior estrutura para lidar com as exigências da rotina e para tomar decisões com mais segurança.",
         ),
         (
             r"Precisa se atentar para que diante de situações emergenciais, a tendência de manter uma postura prudente e a percepção de sensação de menor preparo sobre si mesmo, não postergue sua ação, o que pode influenciar na eficiência de suas atitudes na resolução dos problemas\.",
@@ -147,7 +186,7 @@ _DOMAIN_REWRITES = {
         ),
         (
             r"Mantém uma postura com necessidade de maior constância para alcançar as metas e os objetivos estabelecidos e pode ter menos ambição em relação às conquistas e realizações no trabalho, o que não significa que se sinta insatisfeito\(a\) com o que atingiu\.",
-            "Pode demonstrar necessidade de maior constância para sustentar metas e objetivos estabelecidos, além de menor ambição em relação a novas conquistas no trabalho, sem que isso signifique insatisfação com o que já alcançou.",
+            "Pode demonstrar necessidade de maior constância para sustentar metas e objetivos estabelecidos, além de um ritmo mais comedido na busca por novas conquistas no trabalho, sem que isso signifique insatisfação com o que já alcançou.",
         ),
         (
             r"Neste momento, demonstra momento que pode demandar maior atenção à constância nas responsabilidades e precisa se atentar para que sua necessidade de reforçar alinhamento com combinados e critérios de decisão não interfiram na tomada de decisão, o que pode dificultar o cumprimento de suas responsabilidades conforme esperado\.",
@@ -179,12 +218,71 @@ def rewrite_neopi_synthesis_text(text: str, *, domain_name: str | None = None) -
     for pattern, replacement in _DOMAIN_REWRITES.get(domain_name or "", []):
         rewritten = re.sub(pattern, replacement, rewritten, flags=re.IGNORECASE)
 
+    rewritten = _finalize_domain_tone(rewritten, domain_name or "")
     rewritten = re.sub(r"\(\s*a\s*\)", "", rewritten, flags=re.IGNORECASE)
     rewritten = re.sub(r"\s+([,.;:])", r"\1", rewritten)
     rewritten = re.sub(r"\s+", " ", rewritten).strip()
     if rewritten and rewritten[-1] not in ".!?":
         rewritten = f"{rewritten}."
     return rewritten
+
+
+def _finalize_domain_tone(text: str, domain_name: str) -> str:
+    finalized = text
+
+    if domain_name == "Neuroticismo":
+        finalized = re.sub(
+            r"\bresponder com irritação ou reações mais intensas\b",
+            "demonstrar irritação ou reações mais intensas",
+            finalized,
+            flags=re.IGNORECASE,
+        )
+    elif domain_name == "Amabilidade":
+        finalized = re.sub(
+            r"\bmais franca\b",
+            "mais objetiva",
+            finalized,
+            flags=re.IGNORECASE,
+        )
+        finalized = re.sub(
+            r"\bmais cética e cautelosa\b",
+            "mais criteriosa e cautelosa",
+            finalized,
+            flags=re.IGNORECASE,
+        )
+        finalized = re.sub(
+            r"\bpostura de superioridade\b",
+            "postura de afirmação de suas capacidades",
+            finalized,
+            flags=re.IGNORECASE,
+        )
+        finalized = re.sub(
+            r"\bimagem de presunção\b",
+            "imagem de excesso de autoconfiança",
+            finalized,
+            flags=re.IGNORECASE,
+        )
+    elif domain_name == "Conscienciosidade":
+        finalized = re.sub(
+            r"\bmenos confiante para atender às exigências da rotina\b",
+            "com necessidade de maior estrutura para atender às exigências da rotina",
+            finalized,
+            flags=re.IGNORECASE,
+        )
+        finalized = re.sub(
+            r"\bmenos ambição\b",
+            "um ritmo mais comedido",
+            finalized,
+            flags=re.IGNORECASE,
+        )
+        finalized = re.sub(
+            r"\bmenor preparo\b",
+            "maior necessidade de preparo",
+            finalized,
+            flags=re.IGNORECASE,
+        )
+
+    return finalized
 
 
 def build_friendly_neopi_synthesis_map(synthesis_by_domain: dict[str, str]) -> dict[str, str]:

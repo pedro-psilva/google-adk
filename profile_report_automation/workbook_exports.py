@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import copy
 import re
 import unicodedata
 from datetime import datetime
@@ -52,7 +53,7 @@ def export_filled_workbook(
     _fill_anchor_sheet(workbook, bundle)
     _fill_culture_sheet(workbook, bundle)
     _fill_reference_sheet(workbook, bundle)
-    _fill_neo_review_sheet(workbook, bundle, coverage)
+    _remove_internal_review_sheet(workbook)
     _remove_static_signatures(workbook)
 
     output_root = Path(output_dir)
@@ -154,9 +155,10 @@ def _fill_summary_sheet(workbook: Any, bundle: dict[str, Any], draft: dict[str, 
     ws["B10"] = f"Demanda: {person.get('demand') or '-'}"
     ws["B11"] = f"Procedimentos realizados: {_build_procedures_label(bundle)}"
 
-    neopi_lines = _build_neopi_summary_lines(bundle)
+    neopi_lines = _build_neopi_summary_lines(bundle, draft)
     for row, text in zip(range(21, 26), neopi_lines):
         ws[f"B{row}"] = text
+    _normalize_neopi_summary_styles(ws)
 
     dominant_style = str(bundle.get("profiler", {}).get("dominant_style") or "-")
     ws["B37"] = f"Nesse momento, apresenta predominio do estilo: {dominant_style}"
@@ -295,8 +297,14 @@ def _fill_neo_review_sheet(workbook: Any, bundle: dict[str, Any], coverage: dict
         )
 
 
-def _build_neopi_summary_lines(bundle: dict[str, Any]) -> list[str]:
-    synthesis_map = bundle.get("neopi", {}).get("friendly_synthesis_by_domain") or bundle.get("neopi", {}).get("synthesis_by_domain", {})
+def _remove_internal_review_sheet(workbook: Any) -> None:
+    title = "Base Automacao NEO PI-R"
+    if title in workbook.sheetnames:
+        del workbook[title]
+
+
+def _build_neopi_summary_lines(bundle: dict[str, Any], draft: dict[str, Any]) -> list[str]:
+    synthesis_map = _draft_neopi_summary_map(draft) or bundle.get("neopi", {}).get("friendly_synthesis_by_domain") or bundle.get("neopi", {}).get("synthesis_by_domain", {})
     lines: list[str] = []
 
     for domain_name in NEOPI_DOMAIN_ORDER:
@@ -310,6 +318,24 @@ def _build_neopi_summary_lines(bundle: dict[str, Any]) -> list[str]:
             lines.append(f"{display_name}: {fallback}")
 
     return lines
+
+
+def _draft_neopi_summary_map(draft: dict[str, Any]) -> dict[str, str]:
+    summary_map: dict[str, str] = {}
+    for item in draft.get("neopi_factor_summaries", []):
+        if not isinstance(item, dict):
+            continue
+        domain_name = str(item.get("domain") or "").strip()
+        summary = str(item.get("summary") or "").strip()
+        if domain_name and summary:
+            summary_map[domain_name] = summary
+    return summary_map
+
+
+def _normalize_neopi_summary_styles(ws: Any) -> None:
+    reference_style = copy(ws["B24"]._style)
+    for row in range(21, 26):
+        ws[f"B{row}"]._style = copy(reference_style)
 
 
 def _build_neopi_domain_fallback(bundle: dict[str, Any], domain_name: str) -> str:

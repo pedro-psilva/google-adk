@@ -12,6 +12,11 @@ from .bundle import normalize_text, section_text
 DEFAULT_VERTEX_MODEL = "gemini-2.5-flash"
 
 
+class NeopiFactorSummary(BaseModel):
+    domain: Literal["Neuroticismo", "Extroversão", "Abertura", "Amabilidade", "Conscienciosidade"]
+    summary: str
+
+
 class DraftSection(BaseModel):
     key: Literal[
         "executive_summary",
@@ -32,6 +37,7 @@ class DraftedReport(BaseModel):
     language: str = "pt-BR"
     tone: str = "corporate_respectful"
     sections: list[DraftSection]
+    neopi_factor_summaries: list[NeopiFactorSummary] = Field(default_factory=list)
     qa_notes: list[str] = Field(default_factory=list)
 
 
@@ -88,8 +94,10 @@ def build_generation_payload(bundle: dict[str, Any], coverage: dict[str, Any]) -
         "organizacional e orientada a desenvolvimento. Evite rotulos duros ou expressoes "
         "como medo, apatia, despreparo, rigidez ou hostilidade quando houver formulacoes "
         "mais profissionais e precisas disponiveis. Prefira termos como tendencia, cautela, "
-        "seriedade, constancia, momento atual e pontos de atencao. Responda somente em JSON "
-        "valido conforme o schema."
+        "seriedade, constancia, momento atual e pontos de atencao. Nos fatores Neuroticismo, "
+        "Amabilidade e Conscienciosidade, redobre o cuidado para evitar julgamentos de valor "
+        "ou formulacoes que possam soar invasivas, estigmatizantes ou excessivamente negativas. "
+        "Responda somente em JSON valido conforme o schema."
     )
 
     user_prompt = (
@@ -106,6 +114,13 @@ def build_generation_payload(bundle: dict[str, Any], coverage: dict[str, Any]) -
         "- nao use palavras que soem estigmatizantes ou excessivamente duras\n"
         "- quando houver uma formulacao sensivel, prefira uma leitura de tendencia ou contexto\n"
         "- preserve pontos fortes, riscos e cuidados, mas com boa comunicacao\n\n"
+        "Saida esperada:\n"
+        "- preencha `sections` normalmente\n"
+        "- preencha `neopi_factor_summaries` com 1 resumo por fator do NEO PI-R\n"
+        "- cada resumo do NEO deve ter 1 ou 2 frases, ser fiel ao texto fonte e caber bem em uma planilha\n"
+        "- em Neuroticismo, fale em sensibilidade a pressao, frustracao e necessidade de pausas ou regulacao, sem termos como descontrole, medo ou impulsividade como rotulo\n"
+        "- em Amabilidade, descreva assertividade, valorizacao de si e cuidado com a forma da interacao, sem termos como superioridade, presuncao ou arrogancia\n"
+        "- em Conscienciosidade, descreva necessidade de estrutura, preparo, planejamento e avaliacao, sem termos como despreparo, irresponsabilidade ou precipitacao como rotulo\n\n"
         f"Sinais obrigatorios:\n{json.dumps(required_signals, ensure_ascii=False, indent=2)}\n\n"
         f"Sinais recomendados:\n{json.dumps(recommended_signals, ensure_ascii=False, indent=2)}\n\n"
         f"Fonte estruturada:\n{json.dumps(source_snapshot, ensure_ascii=False, indent=2)}"
@@ -192,12 +207,24 @@ def build_template_fallback(bundle: dict[str, Any], coverage: dict[str, Any]) ->
                 mandatory_signal_ids=[item["signal_id"] for item in coverage.get("required_signals", []) if item["importance"] == "required"],
             ),
         ],
+        neopi_factor_summaries=_fallback_neopi_factor_summaries(bundle),
         qa_notes=[
             "Fallback local gerado sem chamada ao Vertex AI.",
             "Use o preview salvo para enviar a mesma estrutura ao modelo quando as credenciais estiverem disponiveis.",
         ],
     )
     return draft.model_dump()
+
+
+def _fallback_neopi_factor_summaries(bundle: dict[str, Any]) -> list[NeopiFactorSummary]:
+    synthesis_map = bundle.get("neopi", {}).get("friendly_synthesis_by_domain") or bundle.get("neopi", {}).get("synthesis_by_domain", {})
+    summaries: list[NeopiFactorSummary] = []
+    for domain_name in ["Neuroticismo", "Extroversão", "Abertura", "Amabilidade", "Conscienciosidade"]:
+        raw_text = str(synthesis_map.get(domain_name) or "").strip()
+        if not raw_text:
+            continue
+        summaries.append(NeopiFactorSummary(domain=domain_name, summary=raw_text))
+    return summaries
 
 
 def _existing_or_fallback(bundle: dict[str, Any], section_name: str, fallback: list[str]) -> list[str]:

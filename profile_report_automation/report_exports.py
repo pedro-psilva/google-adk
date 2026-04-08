@@ -474,14 +474,22 @@ def _build_pdf_table(headers: list[str], rows: list[list[str]]) -> Table:
 
 
 def _draft_sections_by_key(draft: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {
+    sections = {
         section["key"]: section
         for section in draft.get("sections", [])
         if isinstance(section, dict) and section.get("key")
     }
+    neopi_section = sections.get("neopi")
+    if neopi_section is not None and "neopi_factor_summaries" not in neopi_section:
+        neopi_section["neopi_factor_summaries"] = draft.get("neopi_factor_summaries", [])
+    return sections
 
 
 def _build_neopi_paragraphs(bundle: dict[str, Any], draft_sections: dict[str, dict[str, Any]]) -> list[str]:
+    factor_summaries = _build_neopi_factor_paragraphs(bundle, draft_sections)
+    if factor_summaries:
+        return factor_summaries
+
     paragraphs = _build_section_paragraphs("neopi", bundle, draft_sections)
     if paragraphs:
         return paragraphs
@@ -502,6 +510,27 @@ def _build_neopi_paragraphs(bundle: dict[str, Any], draft_sections: dict[str, di
             )
             break
     return lines
+
+
+def _build_neopi_factor_paragraphs(bundle: dict[str, Any], draft_sections: dict[str, dict[str, Any]]) -> list[str]:
+    neopi_section = draft_sections.get("neopi", {})
+    summary_map = {
+        str(item.get("domain") or "").strip(): str(item.get("summary") or "").strip()
+        for item in neopi_section.get("neopi_factor_summaries", [])
+        if isinstance(item, dict) and str(item.get("domain") or "").strip() and str(item.get("summary") or "").strip()
+    }
+    if not summary_map:
+        return []
+
+    paragraphs: list[str] = []
+    for domain_name in NEOPI_DOMAIN_ORDER:
+        summary = summary_map.get(domain_name)
+        if not summary:
+            continue
+        friendly_text = rewrite_neopi_synthesis_text(summary, domain_name=domain_name)
+        if friendly_text:
+            paragraphs.append(f"{domain_name}: {friendly_text}")
+    return paragraphs
 
 
 def _build_profiler_intro(bundle: dict[str, Any]) -> list[str]:
