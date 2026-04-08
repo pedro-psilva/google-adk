@@ -151,6 +151,27 @@ def clean_text(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value).replace("\x00", " ")).strip()
 
 
+def infer_person_name_from_path(path: Path | None) -> str:
+    if path is None:
+        return ""
+
+    stem = clean_text(path.stem)
+    cleanup_patterns = [
+        r"\s*-\s*neo\s*pi-?r.*$",
+        r"\s*-\s*neopi-?r.*$",
+        r"\s*-\s*regular.*$",
+        r"\s*-\s*extended.*$",
+        r"\s*-\s*relatorio de analise de perfil.*$",
+        r"\s*-\s*\d{5,}.*$",
+    ]
+    candidate = stem
+    for pattern in cleanup_patterns:
+        candidate = re.sub(pattern, "", candidate, flags=re.IGNORECASE)
+
+    candidate = re.sub(r"\s+", " ", candidate).strip(" -_")
+    return candidate
+
+
 def classify_t_score(t_score: int) -> str:
     if t_score <= 34:
         return "muito baixo"
@@ -583,6 +604,15 @@ def extract_culture_summary(ws: Any) -> list[dict[str, Any]]:
 
 def extract_anchor_and_culture_workbook(path: Path) -> dict[str, Any]:
     workbook = load_workbook(path, data_only=True)
+    if _looks_like_report_workbook(workbook):
+        raise ValueError(
+            "A planilha enviada em 'Âncoras e diagnóstico' parece ser o relatório final, e não a planilha de âncoras/diagnóstico."
+        )
+    if len(workbook.worksheets) < 2:
+        raise ValueError(
+            "A planilha enviada em 'Âncoras e diagnóstico' não possui a estrutura esperada para Âncoras e Diagnóstico."
+        )
+
     anchors_ws = workbook.worksheets[0]
     culture_ws = workbook.worksheets[1]
 
@@ -591,6 +621,11 @@ def extract_anchor_and_culture_workbook(path: Path) -> dict[str, Any]:
 
     culture_scores = extract_culture_summary(culture_ws)
     top_cultures = sorted(culture_scores, key=lambda item: item["score"], reverse=True)[:2]
+
+    if not anchor_scores and not culture_scores:
+        raise ValueError(
+            "Nao foi possivel identificar os dados da planilha de Âncoras e Diagnóstico. Verifique se o arquivo correto foi enviado nesse card."
+        )
 
     return {
         "person": {
@@ -607,6 +642,12 @@ def extract_anchor_and_culture_workbook(path: Path) -> dict[str, Any]:
             "top_cultures": top_cultures,
         },
     }
+
+
+def _looks_like_report_workbook(workbook: Any) -> bool:
+    sheet_names = [normalize_text(sheet.title) for sheet in workbook.worksheets]
+    signature_names = {"sintese", "dados gerais", "input profiler", "input cultura organizacional"}
+    return len(signature_names.intersection(sheet_names)) >= 2
 
 
 def extract_profiler_extended(path: Path) -> dict[str, Any]:
@@ -761,13 +802,26 @@ def build_generated_conclusion_lines(
         lines.append(
             "No NEO PI-R, destacam-se "
             + ", ".join(
-                f"{item['domain']} {item['category']}"
+                _format_domain_category_label(str(item["domain"]), str(item["category"]))
                 for item in extreme_domains
                 if item.get("domain") and item.get("category")
             )
             + "."
         )
     return lines[:5]
+
+
+def _format_domain_category_label(domain: str, category: str) -> str:
+    feminine_domains = {"Extroversão", "Abertura", "Amabilidade", "Conscienciosidade"}
+    adjusted_category = category
+    if domain in feminine_domains:
+        adjusted_category = (
+            category.replace("muito baixo", "muito baixa")
+            .replace("baixo", "baixa")
+            .replace("muito alto", "muito alta")
+            .replace("alto", "alta")
+        )
+    return f"{domain} {adjusted_category}"
 
 
 def build_bundle(base_dir: Path) -> dict[str, Any]:
@@ -805,7 +859,10 @@ def build_bundle(base_dir: Path) -> dict[str, Any]:
         )
 
     person = {
-        "name": (report_workbook or {}).get("person", {}).get("name") or anchor_bundle["person"].get("name"),
+        "name": (report_workbook or {}).get("person", {}).get("name")
+        or anchor_bundle["person"].get("name")
+        or infer_person_name_from_path(files.get("neopi_pdf"))
+        or infer_person_name_from_path(files.get("profiler_pdf")),
         "application_date": (report_workbook or {}).get("person", {}).get("application_date")
         or anchor_bundle["person"].get("application_date"),
         "business_unit": (report_workbook or {}).get("person", {}).get("business_unit"),

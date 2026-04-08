@@ -42,8 +42,29 @@ class ProductionBundleGateway:
                     text=True,
                 )
             except subprocess.CalledProcessError as exc:
-                details = (exc.stderr or exc.stdout or str(exc)).strip()
+                details = _extract_subprocess_error_detail(exc)
                 raise ValueError(f"Falha ao montar a base de entrada: {details}") from exc
             return ResolvedBundle(bundle=self._storage.load(extracted_bundle_path), bundle_path=extracted_bundle_path)
 
         raise FileNotFoundError(f"Bundle input not found: {input_path}")
+
+
+def _extract_subprocess_error_detail(exc: subprocess.CalledProcessError) -> str:
+    raw_output = (exc.stderr or exc.stdout or str(exc)).strip()
+    if not raw_output:
+        return str(exc)
+
+    lines = [line.strip() for line in raw_output.splitlines() if line.strip()]
+    filtered_lines = [line for line in lines if "Could not get FontBBox" not in line]
+    if not filtered_lines:
+        filtered_lines = lines
+
+    for line in reversed(filtered_lines):
+        if line.startswith("ValueError:"):
+            return line.split("ValueError:", 1)[1].strip()
+        if line.startswith("FileNotFoundError:"):
+            return line.split("FileNotFoundError:", 1)[1].strip()
+        if line.startswith("RuntimeError:"):
+            return line.split("RuntimeError:", 1)[1].strip()
+
+    return filtered_lines[-1]

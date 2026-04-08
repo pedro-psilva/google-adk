@@ -28,7 +28,7 @@ class BundlePathRequest(BaseModel):
 class PipelineRunRequest(BaseModel):
     bundle_input: str
     output_dir: str = Field(default="artifacts/production-run")
-    draft_mode: Literal["preview", "live"] = Field(default="preview")
+    draft_mode: Literal["preview", "live"] = Field(default="live")
 
 
 UPLOAD_CATEGORY_LABELS = {

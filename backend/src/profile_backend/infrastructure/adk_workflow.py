@@ -29,6 +29,7 @@ PIPELINE_REQUEST_KEY = "app:pipeline_request"
 PIPELINE_RESULT_KEY = "app:pipeline_result"
 PIPELINE_RESPONSE_KEY = "app:pipeline_response"
 PIPELINE_STATUS_KEY = "app:pipeline_status"
+PIPELINE_ERROR_KEY = "app:pipeline_error"
 PIPELINE_ARTIFACTS_KEY = "app:artifact_versions"
 
 LOAD_BUNDLE_REQUEST_KEY = "app:load_bundle_request"
@@ -55,7 +56,28 @@ class DeterministicStepAgent(BaseAgent):
     step_handler: Callable[[InvocationContext], StepExecution]
 
     async def _run_async_impl(self, ctx: InvocationContext):
-        execution = self.step_handler(ctx)
+        existing_error = ctx.session.state.get(PIPELINE_ERROR_KEY)
+        if isinstance(existing_error, dict):
+            return
+
+        try:
+            execution = self.step_handler(ctx)
+        except Exception as exc:
+            error_payload = _build_error_payload(self.name, exc)
+            yield Event(
+                invocation_id=ctx.invocation_id,
+                author=self.name,
+                branch=ctx.branch,
+                content=_build_content(error_payload["message"]),
+                actions=EventActions(
+                    state_delta={
+                        PIPELINE_ERROR_KEY: error_payload,
+                        PIPELINE_STATUS_KEY: "failed",
+                    }
+                ),
+            )
+            return
+
         artifact_delta = await _save_step_artifacts(ctx, execution.artifacts)
         state_delta = dict(execution.state_delta)
         if artifact_delta:
@@ -99,7 +121,7 @@ def _request_from_context(ctx: InvocationContext) -> PipelineRequest:
     return PipelineRequest(
         bundle_input=str(payload["bundle_input"]),
         output_dir=str(payload["output_dir"]),
-        draft_mode=str(payload.get("draft_mode", "preview")),  # type: ignore[arg-type]
+        draft_mode=str(payload.get("draft_mode", "live")),  # type: ignore[arg-type]
     )
 
 
@@ -125,6 +147,15 @@ def _serialize_pipeline_result(result: Any) -> dict[str, Any]:
 
 def _bundle_path_request(bundle_path: str) -> dict[str, str]:
     return {"bundle_path": bundle_path}
+
+
+def _build_error_payload(step_name: str, exc: Exception) -> dict[str, str]:
+    detail = str(exc).strip() or exc.__class__.__name__
+    return {
+        "step": step_name,
+        "type": exc.__class__.__name__,
+        "message": f"Falha na etapa {step_name}: {detail}",
+    }
 
 
 def _bundle_path_from_context(ctx: InvocationContext, request_key: str, missing_message: str) -> str:
@@ -387,6 +418,9 @@ class _AdkJsonOperationRunner:
 
         response = session.state.get(self._response_key)
         if not isinstance(response, dict):
+            error_payload = session.state.get(PIPELINE_ERROR_KEY)
+            if isinstance(error_payload, dict) and error_payload.get("message"):
+                raise RuntimeError(str(error_payload["message"]))
             raise RuntimeError(f"ADK operation {self._app_name} did not produce a JSON response.")
         return response
 
@@ -433,6 +467,9 @@ class AdkPipelineRunnerService:
 
         response = session.state.get(PIPELINE_RESPONSE_KEY)
         if not isinstance(response, dict):
+            error_payload = session.state.get(PIPELINE_ERROR_KEY)
+            if isinstance(error_payload, dict) and error_payload.get("message"):
+                raise RuntimeError(str(error_payload["message"]))
             raise RuntimeError("ADK workflow did not produce a final pipeline response.")
 
         response["adk"]["events"] = _summarize_events(events)
