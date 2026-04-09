@@ -113,6 +113,7 @@ export function runPipeline(baseUrl: string, input: PipelineRunInput) {
       body: JSON.stringify({
         bundle_input: input.bundleInput,
         output_dir: input.outputDir,
+        draft_mode: input.draftMode ?? "preview",
       }),
     },
     baseUrl,

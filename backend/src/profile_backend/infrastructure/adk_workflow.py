@@ -121,7 +121,7 @@ def _request_from_context(ctx: InvocationContext) -> PipelineRequest:
     return PipelineRequest(
         bundle_input=str(payload["bundle_input"]),
         output_dir=str(payload["output_dir"]),
-        draft_mode=str(payload.get("draft_mode", "live")),  # type: ignore[arg-type]
+        draft_mode=str(payload.get("draft_mode", "preview")),  # type: ignore[arg-type]
     )
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import unicodedata
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ from xml.sax.saxutils import escape
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Cm, Pt
+from openpyxl import load_workbook
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
@@ -16,7 +18,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import ListFlowable, ListItem, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import ListFlowable, ListItem, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from profile_report_automation.neopi_language import NEOPI_DOMAIN_ORDER, rewrite_neopi_synthesis_text
 
@@ -51,6 +53,8 @@ def export_local_reports(
     bundle: dict[str, Any],
     coverage: dict[str, Any],
     draft: dict[str, Any],
+    *,
+    workbook_path: str | Path | None = None,
 ) -> dict[str, str]:
     target_dir = Path(output_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -60,7 +64,10 @@ def export_local_reports(
     pdf_path = target_dir / f"{base_name}.pdf"
 
     build_docx_report(docx_path, bundle, draft)
-    build_pdf_report(pdf_path, bundle, draft)
+    if workbook_path:
+        build_pdf_from_workbook(pdf_path, workbook_path)
+    else:
+        build_pdf_report(pdf_path, bundle, draft)
 
     return {
         "docx": str(docx_path.resolve()),
@@ -272,6 +279,86 @@ def build_pdf_report(path: Path, bundle: dict[str, Any], draft: dict[str, Any]) 
     doc.build(story, onFirstPage=_draw_pdf_footer, onLaterPages=_draw_pdf_footer)
 
 
+def build_pdf_from_workbook(path: Path, workbook_path: str | Path) -> None:
+    if _export_workbook_sheet_via_excel(path, workbook_path):
+        return
+
+    _register_pdf_fonts()
+
+    workbook = load_workbook(filename=Path(workbook_path), data_only=True)
+    visible_sheets = _preferred_pdf_worksheets(workbook)
+    margins = _worksheet_pdf_margins(visible_sheets[0]) if visible_sheets else (18 * mm, 18 * mm, 16 * mm, 15 * mm)
+    doc = SimpleDocTemplate(
+        str(path),
+        pagesize=A4,
+        leftMargin=margins[0],
+        rightMargin=margins[1],
+        topMargin=margins[2],
+        bottomMargin=margins[3],
+    )
+    styles = _build_pdf_styles()
+    story: list[Any] = []
+    rendered_sheet_count = 0
+    for worksheet in visible_sheets:
+        rows = _extract_nonempty_worksheet_rows(worksheet)
+        if not rows:
+            continue
+
+        if rendered_sheet_count > 0:
+            story.append(PageBreak())
+        if len(visible_sheets) > 1:
+            story.append(Paragraph(escape(worksheet.title), styles["sheetheading"]))
+            story.append(Spacer(1, 2 * mm))
+        story.extend(
+            _build_pdf_story_from_worksheet_rows(
+                rows,
+                styles,
+                honor_page_break_markers=_is_summary_sheet(worksheet.title),
+            )
+        )
+        rendered_sheet_count += 1
+
+    if rendered_sheet_count == 0:
+        story.append(Paragraph("Nenhum conteudo preenchido foi encontrado na planilha.", styles["body"]))
+
+    doc.build(story)
+
+
+def _export_workbook_sheet_via_excel(path: Path, workbook_path: str | Path) -> bool:
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "export_excel_sheet_to_pdf.ps1"
+    if not script_path.exists():
+        return False
+
+    workbook = Path(workbook_path).resolve()
+    target = Path(path).resolve()
+
+    command = [
+        "powershell",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        str(script_path),
+        "-WorkbookPath",
+        str(workbook),
+        "-PdfPath",
+        str(target),
+        "-WorksheetName",
+        "Síntese",
+    ]
+
+    try:
+        completed = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return False
+
+    return target.exists() and target.stat().st_size > 0 and "PDF_EXPORTED" in completed.stdout
+
+
 def _draw_pdf_footer(canvas: Any, document: Any) -> None:
     canvas.saveState()
     canvas.setFont("ReportBody" if "ReportBody" in pdfmetrics.getRegisteredFontNames() else "Helvetica", 9)
@@ -315,6 +402,15 @@ def _build_pdf_styles() -> dict[str, ParagraphStyle]:
             textColor=colors.HexColor("#111827"),
             spaceAfter=4,
         ),
+        "sheetheading": ParagraphStyle(
+            "ReportSheetHeading",
+            parent=sample["Heading2"],
+            fontName=heading_font,
+            fontSize=13,
+            leading=16,
+            textColor=colors.HexColor("#0f172a"),
+            spaceAfter=6,
+        ),
         "body": ParagraphStyle(
             "ReportBodyStyle",
             parent=sample["BodyText"],
@@ -332,6 +428,34 @@ def _build_pdf_styles() -> dict[str, ParagraphStyle]:
             leading=13,
             textColor=colors.HexColor("#111827"),
             spaceAfter=2,
+        ),
+        "footer": ParagraphStyle(
+            "ReportFooter",
+            parent=sample["BodyText"],
+            fontName=body_font,
+            fontSize=9.6,
+            leading=12,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#4b5563"),
+            spaceAfter=2,
+        ),
+        "sheetbody": ParagraphStyle(
+            "ReportSheetBody",
+            parent=sample["BodyText"],
+            fontName=body_font,
+            fontSize=9.1,
+            leading=11.2,
+            textColor=colors.HexColor("#1f2937"),
+            spaceAfter=1.2,
+        ),
+        "sheetsubheading": ParagraphStyle(
+            "ReportSheetSubheading",
+            parent=sample["Heading3"],
+            fontName=heading_font,
+            fontSize=10,
+            leading=11.8,
+            textColor=colors.HexColor("#111827"),
+            spaceAfter=1.4,
         ),
     }
 
@@ -471,6 +595,219 @@ def _build_pdf_table(headers: list[str], rows: list[list[str]]) -> Table:
         )
     )
     return table
+
+
+def _extract_nonempty_worksheet_rows(worksheet: Any) -> list[list[str]]:
+    rows: list[list[str]] = []
+    for row in worksheet.iter_rows():
+        values = [_format_worksheet_cell(cell) for cell in row]
+        compact_values = [value for value in values if value]
+        if compact_values:
+            rows.append(compact_values)
+    return rows
+
+
+def _format_worksheet_cell(cell: Any) -> str:
+    value = cell.value
+    if value is None:
+        return ""
+
+    if hasattr(value, "strftime"):
+        try:
+            return value.strftime("%d/%m/%Y")
+        except TypeError:
+            return str(value).strip()
+
+    if isinstance(value, bool):
+        return "Sim" if value else "Nao"
+
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        number_format = str(cell.number_format or "")
+        if "%" in number_format:
+            decimals = _percentage_decimal_places(number_format)
+            return f"{value * 100:.{decimals}f}%"
+        if isinstance(value, float):
+            return f"{value:.2f}".rstrip("0").rstrip(".")
+        return str(value)
+
+    return str(value).strip()
+
+
+def _percentage_decimal_places(number_format: str) -> int:
+    match = re.search(r"[.,](0+)%", number_format)
+    if not match:
+        return 0
+    return len(match.group(1))
+
+
+def _build_pdf_story_from_worksheet_rows(
+    rows: list[list[str]],
+    styles: dict[str, ParagraphStyle],
+    *,
+    honor_page_break_markers: bool = False,
+) -> list[Any]:
+    story: list[Any] = []
+    pending_table_rows: list[list[str]] = []
+
+    def flush_table() -> None:
+        nonlocal pending_table_rows
+        if not pending_table_rows:
+            return
+        story.append(_build_workbook_pdf_table(pending_table_rows, styles))
+        story.append(Spacer(1, 3 * mm))
+        pending_table_rows = []
+
+    total_rows = len(rows)
+    for row_index, row in enumerate(rows):
+        if len(row) == 1:
+            flush_table()
+            text = row[0]
+            if honor_page_break_markers and _is_page_break_marker(text):
+                footer_lines = [line.strip() for line in text.splitlines() if line.strip()]
+                if len(footer_lines) > 1:
+                    story.append(Spacer(1, 2 * mm))
+                    for footer_line in footer_lines:
+                        story.append(Paragraph(_paragraph_text(footer_line), styles["footer"]))
+                if row_index < total_rows - 1:
+                    story.append(PageBreak())
+                continue
+            paragraph_style = styles["sheetsubheading"] if _looks_like_heading(text) else styles["sheetbody"]
+            story.append(Paragraph(_paragraph_text(text), paragraph_style))
+            if _looks_like_heading(text):
+                story.append(Spacer(1, 0.5 * mm))
+            continue
+
+        pending_table_rows.append(row)
+
+    flush_table()
+    return story
+
+
+def _build_workbook_pdf_table(
+    rows: list[list[str]],
+    styles: dict[str, ParagraphStyle],
+) -> Table:
+    max_columns = max(len(row) for row in rows)
+    padded_rows = [row + [""] * (max_columns - len(row)) for row in rows]
+    header_row = _looks_like_table_header(padded_rows)
+    body_font = "ReportBody" if "ReportBody" in pdfmetrics.getRegisteredFontNames() else "Helvetica"
+    heading_font = "ReportHeadingBold" if "ReportHeadingBold" in pdfmetrics.getRegisteredFontNames() else "Helvetica-Bold"
+
+    table_data: list[list[Any]] = []
+    for row_index, row in enumerate(padded_rows):
+        formatted_row: list[Any] = []
+        for cell_value in row:
+            style = styles["label"] if header_row and row_index == 0 else styles["body"]
+            formatted_row.append(Paragraph(_paragraph_text(cell_value), style))
+        table_data.append(formatted_row)
+
+    table = Table(
+        table_data,
+        hAlign="LEFT",
+        colWidths=_estimate_workbook_table_widths(padded_rows),
+        repeatRows=1 if header_row else 0,
+    )
+    style_commands = [
+        ("FONTNAME", (0, 0), (-1, -1), body_font),
+        ("FONTSIZE", (0, 0), (-1, -1), 9.3),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("GRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#d1d5db")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]
+    if header_row:
+        style_commands.extend(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f4f6")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#111827")),
+                ("FONTNAME", (0, 0), (-1, 0), heading_font),
+            ]
+        )
+    table.setStyle(TableStyle(style_commands))
+    return table
+
+
+def _estimate_workbook_table_widths(rows: list[list[str]]) -> list[float]:
+    page_width = A4[0] - (36 * mm)
+    column_count = max(len(row) for row in rows)
+    if column_count == 0:
+        return []
+
+    max_lengths = [0] * column_count
+    for row in rows:
+        for index, value in enumerate(row):
+            max_lengths[index] = max(max_lengths[index], min(len(value), 80))
+
+    weight_floor = 12
+    weights = [max(length, weight_floor) for length in max_lengths]
+    weight_sum = sum(weights) or column_count
+    widths = [(page_width * weight) / weight_sum for weight in weights]
+
+    minimum_width = 26 * mm
+    if any(width < minimum_width for width in widths):
+        return [page_width / column_count] * column_count
+    return widths
+
+
+def _looks_like_table_header(rows: list[list[str]]) -> bool:
+    if len(rows) < 2:
+        return False
+
+    first_row = rows[0]
+    nonempty_cells = [cell for cell in first_row if cell.strip()]
+    if len(nonempty_cells) < 2:
+        return False
+
+    average_size = sum(len(cell) for cell in nonempty_cells) / len(nonempty_cells)
+    return average_size <= 30
+
+
+def _looks_like_heading(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    if stripped.endswith(":"):
+        return True
+    if re.match(r"^[IVXLC]+\.\s", stripped):
+        return True
+    if re.match(r"^\d+([.-]\d+)*\s*[-:]", stripped):
+        return True
+    letters = [character for character in stripped if character.isalpha()]
+    return bool(letters) and stripped == stripped.upper()
+
+
+def _paragraph_text(value: str) -> str:
+    escaped = escape(value.strip())
+    return escaped.replace("\n", "<br/>")
+
+
+def _preferred_pdf_worksheets(workbook: Any) -> list[Any]:
+    visible_sheets = [worksheet for worksheet in workbook.worksheets if worksheet.sheet_state == "visible"]
+    summary_sheets = [worksheet for worksheet in visible_sheets if _is_summary_sheet(worksheet.title)]
+    return summary_sheets or visible_sheets
+
+
+def _worksheet_pdf_margins(worksheet: Any) -> tuple[float, float, float, float]:
+    margins = worksheet.page_margins
+    return (
+        float(getattr(margins, "left", 0.7)) * 25.4 * mm,
+        float(getattr(margins, "right", 0.7)) * 25.4 * mm,
+        float(getattr(margins, "top", 0.75)) * 25.4 * mm,
+        float(getattr(margins, "bottom", 0.75)) * 25.4 * mm,
+    )
+
+
+def _is_summary_sheet(title: str) -> bool:
+    normalized = unicodedata.normalize("NFKD", title)
+    without_marks = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    return without_marks.strip().lower() == "sintese"
+
+
+def _is_page_break_marker(text: str) -> bool:
+    first_line = text.splitlines()[0].strip()
+    return bool(re.match(r"^P[aá]gina\s+\d+\s+de\s+\d+$", first_line, flags=re.IGNORECASE))
 
 
 def _draft_sections_by_key(draft: dict[str, Any]) -> dict[str, dict[str, Any]]:

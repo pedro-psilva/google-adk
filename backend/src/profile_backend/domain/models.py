@@ -11,7 +11,7 @@ DraftMode = Literal["preview", "template", "live"]
 class PipelineRequest:
     bundle_input: str
     output_dir: str
-    draft_mode: DraftMode = "live"
+    draft_mode: DraftMode = "preview"
 
 
 @dataclass

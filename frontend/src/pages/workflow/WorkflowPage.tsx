@@ -281,6 +281,7 @@ export function WorkflowPage() {
       const pipeline = await runPipeline(apiBaseUrl, {
         bundleInput: uploaded.bundle_input,
         outputDir: uploaded.output_dir,
+        draftMode: "preview",
       });
       const [bundlePayload, coveragePayload, draftPayload] = await Promise.all([
         loadJsonArtifact<BundleResponse>(apiBaseUrl, pipeline.bundle_path),
@@ -313,6 +314,7 @@ export function WorkflowPage() {
     coverage?.required_signals.filter((item) => item.importance === "required" && !item.coverage.conclusion.covered) ?? [];
   const mediumMentions = coverage?.possible_medium_mentions ?? [];
   const localXlsxPath = pipelineResult?.artifacts.local_report_xlsx ?? null;
+  const localPdfPath = pipelineResult?.artifacts.local_report_pdf ?? null;
   const attentionItems = buildNeopiAttentionItems(bundle);
   const selectedCount = intakeSlots.filter((slot) => selectedFiles[slot.id]).length;
   const canRunAutomation = selectedCount === intakeSlots.length;
@@ -581,20 +583,32 @@ export function WorkflowPage() {
 
         <div className="workflow-delivery-grid">
           <article className="workflow-review-card">
-            <h3>Baixar Excel</h3>
-            {localXlsxPath ? (
+            <h3>Baixar arquivos</h3>
+            {localXlsxPath || localPdfPath ? (
               <div className="workflow-link-row">
-                <a
-                  className="workflow-link-chip"
-                  href={buildDownloadUrl(apiBaseUrl, localXlsxPath)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Baixar Excel
-                </a>
+                {localXlsxPath ? (
+                  <a
+                    className="workflow-link-chip"
+                    href={buildDownloadUrl(apiBaseUrl, localXlsxPath)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Baixar Excel
+                  </a>
+                ) : null}
+                {localPdfPath ? (
+                  <a
+                    className="workflow-link-chip"
+                    href={buildDownloadUrl(apiBaseUrl, localPdfPath)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Baixar PDF
+                  </a>
+                ) : null}
               </div>
             ) : (
-              <p className="empty-state">Depois da analise, a planilha preenchida aparece aqui para download.</p>
+              <p className="empty-state">Depois da analise, os arquivos finais aparecem aqui para download.</p>
             )}
           </article>
 

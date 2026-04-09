@@ -125,6 +125,7 @@ export interface DraftResponse {
 export interface PipelineRunInput {
   bundleInput: string;
   outputDir: string;
+  draftMode?: "preview" | "live";
 }
 
 export interface NeopiDomainResult {

@@ -43,7 +43,13 @@ def run_pipeline(
         used_live_vertex = False
 
     workbook_report_path = export_filled_workbook(output_dir, resolved_bundle.bundle, coverage, draft)
-    local_reports = export_local_reports(output_dir, resolved_bundle.bundle, coverage, draft)
+    local_reports = export_local_reports(
+        output_dir,
+        resolved_bundle.bundle,
+        coverage,
+        draft,
+        workbook_path=workbook_report_path,
+    )
 
     result = PipelineResult(
         status=coverage.get("summary", {}).get("status", "unknown"),

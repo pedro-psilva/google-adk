@@ -150,37 +150,36 @@ def _fill_summary_sheet(workbook: Any, bundle: dict[str, Any], draft: dict[str, 
     ws = workbook["Síntese"]
     person = bundle.get("person", {})
     ws["B7"] = f"Nome: {person.get('name') or '-'}"
-    ws["B8"] = f"Data do relatório: {_format_generation_date()}"
-    ws["B9"] = f"Unidade de negócios: {person.get('business_unit') or '-'}"
+    ws["B8"] = f"Data da aplicação: {_format_application_date(person.get('application_date'))}"
+    ws["B9"] = person.get("business_unit") or "-"
     ws["B10"] = f"Demanda: {person.get('demand') or '-'}"
     ws["B11"] = f"Procedimentos realizados: {_build_procedures_label(bundle)}"
 
     neopi_lines = _build_neopi_summary_lines(bundle, draft)
     for row, text in zip(range(21, 26), neopi_lines):
         ws[f"B{row}"] = text
-    _normalize_neopi_summary_styles(ws)
 
     dominant_style = str(bundle.get("profiler", {}).get("dominant_style") or "-")
-    ws["B37"] = f"Nesse momento, apresenta predominio do estilo: {dominant_style}"
+    ws["B37"] = f"Nesse momento, apresenta o estilo: {dominant_style}."
     ws["B38"] = _build_profiler_summary(bundle)
 
     anchor_rows = _build_anchor_summary_lines(bundle)
-    for row, text in zip([51, 52], anchor_rows):
+    for row, text in zip([52, 53], anchor_rows):
         ws[f"B{row}"] = text
-    for row in [51, 52]:
-        if row - 51 >= len(anchor_rows):
+    for row in [52, 53]:
+        if row - 52 >= len(anchor_rows):
             ws[f"B{row}"] = ""
 
     culture_rows = _build_culture_summary_lines(bundle)
-    for row, text in zip([67, 68], culture_rows):
+    for row, text in zip([71, 72], culture_rows):
         ws[f"B{row}"] = text
-    for row in [67, 68]:
-        if row - 67 >= len(culture_rows):
+    for row in [71, 72]:
+        if row - 71 >= len(culture_rows):
             ws[f"B{row}"] = ""
 
     conclusion_lines = _build_conclusion_lines(bundle, draft)
-    ws["B71"] = "A partir dos indicadores de seu perfil, apresenta:"
-    for index, row in enumerate(range(72, 77), start=1):
+    ws["B74"] = "A partir dos indicadores de seu perfil, apresenta:"
+    for index, row in enumerate(range(75, 80), start=1):
         if index <= len(conclusion_lines):
             ws[f"B{row}"] = f"{index}- {conclusion_lines[index - 1]}"
         else:
@@ -206,10 +205,12 @@ def _fill_anchor_sheet(workbook: Any, bundle: dict[str, Any]) -> None:
         if item:
             description = str(item.get("description") or "").strip()
             prefix = anchor_name.replace("Independência", "e Independência")
-            ws[f"A{row}"] = f"{prefix}: {description}" if description else prefix
+            if not str(ws[f"A{row}"].value or "").strip():
+                ws[f"A{row}"] = f"{prefix}: {description}" if description else prefix
             ws[f"E{row}"] = float(item["average"])
         else:
-            ws[f"A{row}"] = anchor_name
+            if not str(ws[f"A{row}"].value or "").strip():
+                ws[f"A{row}"] = anchor_name
             ws[f"E{row}"] = ""
 
 
@@ -221,7 +222,7 @@ def _fill_culture_sheet(workbook: Any, bundle: dict[str, Any]) -> None:
     for index, culture_name in enumerate(CULTURE_ORDER, start=2):
         item = culture_map.get(culture_name, {})
         description = str(item.get("description") or "").strip()
-        if description:
+        if description and not str(ws[f"B{index}"].value or "").strip():
             ws[f"B{index}"] = f"{culture_name}: {description}"
 
     for index, culture_name in enumerate(CULTURE_ORDER, start=3):
@@ -240,7 +241,8 @@ def _fill_reference_sheet(workbook: Any, bundle: dict[str, Any]) -> None:
     }
 
     for cell, text in intros.items():
-        ws[cell] = text
+        if not str(ws[cell].value or "").strip():
+            ws[cell] = text
 
 
 def _fill_neo_review_sheet(workbook: Any, bundle: dict[str, Any], coverage: dict[str, Any]) -> None:
@@ -330,12 +332,6 @@ def _draft_neopi_summary_map(draft: dict[str, Any]) -> dict[str, str]:
         if domain_name and summary:
             summary_map[domain_name] = summary
     return summary_map
-
-
-def _normalize_neopi_summary_styles(ws: Any) -> None:
-    reference_style = copy(ws["B24"]._style)
-    for row in range(21, 26):
-        ws[f"B{row}"]._style = copy(reference_style)
 
 
 def _build_neopi_domain_fallback(bundle: dict[str, Any], domain_name: str) -> str:
