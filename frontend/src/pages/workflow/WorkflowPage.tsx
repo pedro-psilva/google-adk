@@ -30,9 +30,9 @@ const initialSelectedFiles: AssessmentUploadFiles = {
 const sectionLabels: Record<string, string> = {
   neopi: "NEO PI-R",
   profiler: "Perfil comportamental",
-  career_anchors: "Ancoras de carreira",
-  cultural_diagnosis: "Diagnostico cultural",
-  conclusion: "Conclusao",
+  career_anchors: "Âncoras de carreira",
+  cultural_diagnosis: "Diagnóstico cultural",
+  conclusion: "Conclusão",
 };
 
 const intakeSlots = [
@@ -52,10 +52,10 @@ const intakeSlots = [
   },
   {
     id: "anchors",
-    label: "Ancoras e diagnostico",
+    label: "Âncoras e diagnóstico",
     category: "anchors_workbook",
     accept: ".xlsx",
-    hint: "Selecione a planilha de ancoras e diagnostico.",
+    hint: "Selecione a planilha de âncoras e diagnóstico.",
   },
 ] as const satisfies ReadonlyArray<{
   id: AssessmentUploadSlotId;
@@ -271,17 +271,16 @@ export function WorkflowPage() {
   async function handleRunAutomation() {
     const missingSlots = intakeSlots.filter((slot) => !selectedFiles[slot.id]).map((slot) => slot.label);
     if (missingSlots.length) {
-      setError(`Selecione os 3 arquivos obrigatorios antes de gerar a analise. Faltando: ${missingSlots.join(", ")}.`);
-      setLastAction("Analise bloqueada");
+      setError(`Selecione os 3 arquivos obrigatórios antes de gerar a análise. Faltando: ${missingSlots.join(", ")}.`);
+      setLastAction("Análise bloqueada");
       return;
     }
 
-    const payload = await runAction("Analise gerada", async () => {
+    const payload = await runAction("Análise gerada", async () => {
       const uploaded = await uploadAssessmentFiles(apiBaseUrl, selectedFiles);
       const pipeline = await runPipeline(apiBaseUrl, {
         bundleInput: uploaded.bundle_input,
         outputDir: uploaded.output_dir,
-        draftMode: "preview",
       });
       const [bundlePayload, coveragePayload, draftPayload] = await Promise.all([
         loadJsonArtifact<BundleResponse>(apiBaseUrl, pipeline.bundle_path),
@@ -330,10 +329,10 @@ export function WorkflowPage() {
     <div className="page-stack">
       <section className="surface surface--hero workflow-hero workflow-hero--compact">
         <div className="workflow-hero__content">
-          <p className="workflow-hero__eyebrow">Analise de perfil</p>
+          <p className="workflow-hero__eyebrow">Análise de perfil</p>
           <h1 className="workflow-hero__title">Selecione os 3 arquivos e gere a planilha final.</h1>
           <p className="workflow-hero__description">
-            Escolha um arquivo em cada card e a geracao cuida do envio e da analise em sequencia.
+            Escolha um arquivo em cada card e a geração cuida do envio e da análise em sequência.
           </p>
 
           <div className="workflow-hero__badges">
@@ -341,7 +340,7 @@ export function WorkflowPage() {
             <Badge tone={uploadedSelectionMatches ? "success" : canRunAutomation ? "neutral" : "warning"}>
               {uploadedSelectionMatches ? "Base atualizada" : canRunAutomation ? "Pronto para gerar" : `${selectedCount}/3 selecionados`}
             </Badge>
-            <Badge tone={localXlsxPath ? "success" : "neutral"}>{localXlsxPath ? "Excel pronto" : "Aguardando geracao"}</Badge>
+            <Badge tone={localXlsxPath ? "success" : "neutral"}>{localXlsxPath ? "Excel pronto" : "Aguardando geração"}</Badge>
           </div>
         </div>
 
@@ -349,19 +348,19 @@ export function WorkflowPage() {
           <MetricCard
             label="Arquivos"
             value={String(selectedCount)}
-            detail="Cada card recebe um documento especifico da avaliacao."
+            detail="Cada card recebe um documento específico da avaliação."
             tone={canRunAutomation ? "success" : "warning"}
           />
           <MetricCard
-            label="Pendencias"
+            label="Pendências"
             value={coverage ? String(coverage.summary.required_overall.missing) : "--"}
-            detail="Itens obrigatorios ainda ausentes no texto."
+            detail="Itens obrigatórios ainda ausentes no texto."
             tone={coverage?.summary.required_overall.missing === 0 ? "success" : "warning"}
           />
           <MetricCard
-            label="Ultima acao"
+            label="Última ação"
             value={lastAction}
-            detail={localXlsxPath ? "A planilha final ja pode ser baixada." : "Depois da analise, a planilha final aparece aqui."}
+            detail={localXlsxPath ? "A planilha final já pode ser baixada." : "Depois da análise, a planilha final aparece aqui."}
             tone={localXlsxPath ? "success" : "neutral"}
           />
         </div>
@@ -371,7 +370,7 @@ export function WorkflowPage() {
         <div className="panel-heading panel-heading--compact">
           <div>
             <p className="panel-heading__eyebrow">Entrada</p>
-            <h2 className="panel-heading__title">Arquivos da avaliacao</h2>
+            <h2 className="panel-heading__title">Arquivos da avaliação</h2>
           </div>
         </div>
 
@@ -429,18 +428,18 @@ export function WorkflowPage() {
         </div>
 
         <div className="workflow-actions">
-          <Button busy={busyAction === "Analise gerada"} disabled={!canRunAutomation} onClick={() => void handleRunAutomation()}>
-            Gerar analise
+          <Button busy={busyAction === "Análise gerada"} disabled={!canRunAutomation} onClick={() => void handleRunAutomation()}>
+            Gerar análise
           </Button>
         </div>
 
         {!canRunAutomation ? (
-          <p className="empty-state">Selecione os 3 arquivos obrigatorios para habilitar a geracao.</p>
+          <p className="empty-state">Selecione os 3 arquivos obrigatórios para habilitar a geração.</p>
         ) : null}
 
         {uploadedSource ? (
           <div className="workflow-file-group">
-            <p className="workflow-file-group__label">Ultima base enviada na geracao</p>
+            <p className="workflow-file-group__label">Última base enviada na geração</p>
             <div className="workflow-file-list">
               {uploadedSource.files.map((file) => (
                 <span key={`${file.name}-${file.size_bytes}`} className="workflow-file-chip workflow-file-chip--uploaded">
@@ -459,7 +458,7 @@ export function WorkflowPage() {
         <section className="surface surface--panel workflow-panel">
           <div className="panel-heading panel-heading--compact">
             <div>
-              <p className="panel-heading__eyebrow">Revisao</p>
+              <p className="panel-heading__eyebrow">Revisão</p>
               <h2 className="panel-heading__title">Sinais para ajustar</h2>
             </div>
             <Badge tone={coverage?.summary.status === "pass" ? "success" : "warning"}>
@@ -470,7 +469,7 @@ export function WorkflowPage() {
           {coverage ? (
             <div className="workflow-review-stack">
               <article className="workflow-review-card">
-                <h3>Faltando no relatorio</h3>
+                <h3>Faltando no relatório</h3>
                 {missingOverall.length ? (
                   <ul className="workflow-review-list">
                     {missingOverall.map((item) => (
@@ -481,12 +480,12 @@ export function WorkflowPage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="empty-state">Nenhuma pendencia no corpo principal.</p>
+                  <p className="empty-state">Nenhuma pendência no corpo principal.</p>
                 )}
               </article>
 
               <article className="workflow-review-card">
-                <h3>Faltando na conclusao</h3>
+                <h3>Faltando na conclusão</h3>
                 {missingConclusion.length ? (
                   <ul className="workflow-review-list">
                     {missingConclusion.map((item) => (
@@ -497,12 +496,12 @@ export function WorkflowPage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="empty-state">A conclusao ja cobre os sinais obrigatorios.</p>
+                  <p className="empty-state">A conclusão já cobre os sinais obrigatórios.</p>
                 )}
               </article>
 
               <article className="workflow-review-card">
-                <h3>Mencoes medias</h3>
+                <h3>Menções médias</h3>
                 {mediumMentions.length ? (
                   <ul className="workflow-review-list">
                     {mediumMentions.map((item) => (
@@ -513,12 +512,12 @@ export function WorkflowPage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="empty-state">Nenhum indicador medio destacado para revisao.</p>
+                  <p className="empty-state">Nenhum indicador médio destacado para revisão.</p>
                 )}
               </article>
 
               <article className="workflow-review-card">
-                <h3>Pontos de atencao</h3>
+                <h3>Pontos de atenção</h3>
                 {attentionItems.length ? (
                   <ul className="workflow-review-list workflow-review-list--attention">
                     {attentionItems.map((item) => (
@@ -535,7 +534,7 @@ export function WorkflowPage() {
               </article>
             </div>
           ) : (
-            <p className="empty-state">Depois da geracao, esta area mostra o que precisa entrar no texto final.</p>
+            <p className="empty-state">Depois da geração, esta área mostra o que precisa entrar no texto final.</p>
           )}
         </section>
 
@@ -567,7 +566,7 @@ export function WorkflowPage() {
               ))}
             </div>
           ) : (
-            <p className="empty-state">O rascunho aparece aqui depois da geracao.</p>
+            <p className="empty-state">O rascunho aparece aqui depois da geração.</p>
           )}
         </section>
       </div>
@@ -575,15 +574,17 @@ export function WorkflowPage() {
       <section className="surface surface--panel workflow-panel">
         <div className="panel-heading panel-heading--compact">
           <div>
-            <p className="panel-heading__eyebrow">Saida</p>
-            <h2 className="panel-heading__title">Planilha final</h2>
+            <p className="panel-heading__eyebrow">Saída</p>
+            <h2 className="panel-heading__title">Arquivos finais</h2>
           </div>
-          <Badge tone={localXlsxPath ? "success" : "neutral"}>{localXlsxPath ? "pronto" : "aguardando"}</Badge>
+          <Badge tone={localXlsxPath || localPdfPath ? "success" : "neutral"}>
+            {localXlsxPath || localPdfPath ? "pronto" : "aguardando"}
+          </Badge>
         </div>
 
         <div className="workflow-delivery-grid">
           <article className="workflow-review-card">
-            <h3>Baixar arquivos</h3>
+            <h3>Downloads</h3>
             {localXlsxPath || localPdfPath ? (
               <div className="workflow-link-row">
                 {localXlsxPath ? (
@@ -608,16 +609,16 @@ export function WorkflowPage() {
                 ) : null}
               </div>
             ) : (
-              <p className="empty-state">Depois da analise, os arquivos finais aparecem aqui para download.</p>
+              <p className="empty-state">Depois da análise, o Excel e o PDF da planilha aparecem aqui para download.</p>
             )}
           </article>
 
           <article className="workflow-review-card">
             <h3>Resultado esperado</h3>
             {localXlsxPath ? (
-              <p className="empty-state">A planilha modelo foi preenchida com os dados da avaliacao e esta pronta para revisao final.</p>
+              <p className="empty-state">A planilha modelo foi preenchida e o PDF é gerado a partir desse mesmo Excel.</p>
             ) : (
-              <p className="empty-state">O foco desta tela agora e somente gerar e devolver o arquivo `.xlsx` final.</p>
+              <p className="empty-state">O foco desta tela é devolver o Excel final e sua versão em PDF, preservando o layout da planilha.</p>
             )}
           </article>
         </div>

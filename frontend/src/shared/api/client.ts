@@ -44,8 +44,8 @@ async function request<T>(path: string, init?: RequestInit, baseUrl = ""): Promi
   } catch (caughtError) {
     const message =
       caughtError instanceof Error && caughtError.message
-        ? `Nao foi possivel conectar ao backend. Inicie a API local e tente novamente. Detalhe: ${caughtError.message}`
-        : "Nao foi possivel conectar ao backend. Inicie a API local e tente novamente.";
+        ? `Não foi possível conectar ao backend. Inicie a API local e tente novamente. Detalhe: ${caughtError.message}`
+        : "Não foi possível conectar ao backend. Inicie a API local e tente novamente.";
     throw new ApiError(message, 0, null);
   }
 
@@ -58,7 +58,7 @@ async function request<T>(path: string, init?: RequestInit, baseUrl = ""): Promi
         ? String((payload as { detail: string }).detail)
         : typeof payload === "string"
           ? payload
-          : "A requisicao ao backend falhou.";
+          : "A requisição ao backend falhou.";
     throw new ApiError(message, response.status, payload);
   }
 
