@@ -155,7 +155,7 @@ def infer_person_name_from_path(path: Path | None) -> str:
     if path is None:
         return ""
 
-    stem = clean_text(path.stem)
+    stem = clean_text(path.stem.replace("_", " "))
     cleanup_patterns = [
         r"\s*-\s*neo\s*pi-?r.*$",
         r"\s*-\s*neopi-?r.*$",
@@ -168,8 +168,106 @@ def infer_person_name_from_path(path: Path | None) -> str:
     for pattern in cleanup_patterns:
         candidate = re.sub(pattern, "", candidate, flags=re.IGNORECASE)
 
+    candidate = candidate.replace("-", " ")
     candidate = re.sub(r"\s+", " ", candidate).strip(" -_")
     return candidate
+
+
+def normalize_person_name_for_match(value: str) -> str:
+    normalized = normalize_text(value)
+    normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def tokenize_person_name(value: str) -> list[str]:
+    return [token for token in normalize_person_name_for_match(value).split(" ") if token]
+
+
+def tokens_compatible(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    if len(left) == 1 and right.startswith(left):
+        return True
+    if len(right) == 1 and left.startswith(right):
+        return True
+    return False
+
+
+def person_names_match(left: str, right: str) -> bool:
+    left_tokens = tokenize_person_name(left)
+    right_tokens = tokenize_person_name(right)
+    if not left_tokens or not right_tokens:
+        return False
+
+    if left_tokens == right_tokens:
+        return True
+
+    if not tokens_compatible(left_tokens[0], right_tokens[0]):
+        return False
+    if not tokens_compatible(left_tokens[-1], right_tokens[-1]):
+        return False
+
+    shorter, longer = (
+        (left_tokens, right_tokens) if len(left_tokens) <= len(right_tokens) else (right_tokens, left_tokens)
+    )
+    matched = 0
+    for token in shorter:
+        if any(tokens_compatible(token, candidate) for candidate in longer):
+            matched += 1
+
+    return matched / max(1, len(shorter)) >= 0.75
+
+
+def score_person_name_completeness(value: str) -> tuple[int, int, int]:
+    tokens = tokenize_person_name(value)
+    return (
+        len(tokens),
+        sum(1 for token in tokens if len(token) > 1),
+        len(normalize_person_name_for_match(value)),
+    )
+
+
+def choose_best_person_name(*candidates: str) -> str:
+    valid_candidates = [candidate.strip() for candidate in candidates if candidate and candidate.strip()]
+    if not valid_candidates:
+        return ""
+    return max(valid_candidates, key=score_person_name_completeness)
+
+
+def resolve_person_identity(
+    *,
+    neopi_path: Path | None,
+    profiler_path: Path | None,
+    anchor_name: str,
+) -> tuple[str, list[str]]:
+    notes: list[str] = []
+    neopi_name = infer_person_name_from_path(neopi_path)
+    profiler_name = infer_person_name_from_path(profiler_path)
+    anchor_name = clean_text(anchor_name)
+
+    pdf_name = choose_best_person_name(neopi_name, profiler_name)
+
+    if neopi_name and profiler_name and not person_names_match(neopi_name, profiler_name):
+        raise ValueError(
+            "Os arquivos de NEO PI-R e Perfil comportamental parecem pertencer a pessoas diferentes. "
+            f"NEO PI-R: '{neopi_name}' | Perfil: '{profiler_name}'."
+        )
+
+    if anchor_name and pdf_name and not person_names_match(anchor_name, pdf_name):
+        raise ValueError(
+            "Os arquivos enviados parecem pertencer a pessoas diferentes. "
+            f"NEO/Perfil: '{pdf_name}' | Âncoras/Diagnóstico: '{anchor_name}'."
+        )
+
+    if anchor_name and pdf_name and person_names_match(anchor_name, pdf_name):
+        chosen_name = choose_best_person_name(anchor_name, pdf_name)
+        if normalize_person_name_for_match(anchor_name) != normalize_person_name_for_match(pdf_name):
+            notes.append(
+                "Nome conciliado entre PDFs e planilha de Âncoras/Diagnóstico para preservar a forma mais completa."
+            )
+        return chosen_name, notes
+
+    return pdf_name or anchor_name, notes
 
 
 def classify_t_score(t_score: int) -> str:
@@ -843,12 +941,18 @@ def build_bundle(base_dir: Path) -> dict[str, Any]:
         profiler_bundle=profiler_bundle,
         anchor_bundle=anchor_bundle,
     )
+    resolved_person_name, identity_notes = resolve_person_identity(
+        neopi_path=files.get("neopi_pdf"),
+        profiler_path=files.get("profiler_pdf"),
+        anchor_name=anchor_bundle["person"].get("name") or "",
+    )
 
     notes = []
     if report_workbook:
         notes.extend(report_workbook.get("notes", []))
     else:
         notes.append("Report workbook not provided. Generated sections were created from the raw assessment files.")
+    notes.extend(identity_notes)
     if (
         (report_workbook or {}).get("dominant_profiler_style") or profiler_bundle.get("dominant_style_from_pdf")
     ) and anchor_bundle["career_anchors"]["top_anchors"]:
@@ -859,10 +963,7 @@ def build_bundle(base_dir: Path) -> dict[str, Any]:
         )
 
     person = {
-        "name": (report_workbook or {}).get("person", {}).get("name")
-        or anchor_bundle["person"].get("name")
-        or infer_person_name_from_path(files.get("neopi_pdf"))
-        or infer_person_name_from_path(files.get("profiler_pdf")),
+        "name": (report_workbook or {}).get("person", {}).get("name") or resolved_person_name,
         "application_date": (report_workbook or {}).get("person", {}).get("application_date")
         or anchor_bundle["person"].get("application_date"),
         "business_unit": (report_workbook or {}).get("person", {}).get("business_unit"),
