@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
+from openpyxl.styles import PatternFill
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.properties import PageSetupProperties
+import pythoncom
+from win32com.client import DispatchEx
 
 from profile_report_automation.neopi_language import (
     NEOPI_DISPLAY_LABELS,
@@ -55,12 +60,48 @@ def export_filled_workbook(
     _fill_reference_sheet(workbook, bundle)
     _remove_internal_review_sheet(workbook)
     _remove_static_signatures(workbook)
+    _compact_workbook_layout(workbook)
 
     output_root = Path(output_dir)
     output_root.mkdir(parents=True, exist_ok=True)
     output_path = output_root / f"{_build_report_basename(bundle)}.xlsx"
     workbook.save(output_path)
     return str(output_path.resolve())
+
+
+def export_workbook_pdf(workbook_path: str | Path) -> str:
+    source_path = Path(workbook_path).expanduser().resolve()
+    if not source_path.exists():
+        raise FileNotFoundError(f"Planilha nao encontrada para exportacao em PDF: {source_path}")
+
+    pdf_path = source_path.with_suffix(".pdf")
+    excel_app = None
+    workbook = None
+
+    pythoncom.CoInitialize()
+    try:
+        excel_app = DispatchEx("Excel.Application")
+        excel_app.Visible = False
+        excel_app.DisplayAlerts = False
+        workbook = excel_app.Workbooks.Open(str(source_path))
+        try:
+            worksheet = workbook.Worksheets("Síntese")
+        except Exception:
+            worksheet = workbook.Worksheets(1)
+        worksheet.PageSetup.CenterHorizontally = True
+        worksheet.PageSetup.CenterVertically = False
+        worksheet.PageSetup.Zoom = False
+        worksheet.PageSetup.FitToPagesWide = 1
+        worksheet.PageSetup.FitToPagesTall = False
+        worksheet.ExportAsFixedFormat(0, str(pdf_path), 0, True, False)
+    finally:
+        if workbook is not None:
+            workbook.Close(False)
+        if excel_app is not None:
+            excel_app.Quit()
+        pythoncom.CoUninitialize()
+
+    return str(pdf_path.resolve())
 
 
 def _resolve_template_path(bundle: dict[str, Any]) -> Path | None:
@@ -185,6 +226,8 @@ def _fill_summary_sheet(workbook: Any, bundle: dict[str, Any], draft: dict[str, 
         else:
             ws[f"B{row}"] = ""
 
+    _clear_summary_side_fill(ws)
+
 
 def _fill_profiler_sheet(workbook: Any, bundle: dict[str, Any]) -> None:
     ws = workbook["Input Profiler"]
@@ -303,6 +346,88 @@ def _remove_internal_review_sheet(workbook: Any) -> None:
     title = "Base Automacao NEO PI-R"
     if title in workbook.sheetnames:
         del workbook[title]
+
+
+def _compact_workbook_layout(workbook: Any) -> None:
+    for worksheet in workbook.worksheets:
+        _compact_worksheet_layout(worksheet)
+
+
+def _compact_worksheet_layout(worksheet: Any) -> None:
+    last_data_row = _find_last_non_empty_row(worksheet)
+    if last_data_row <= 0:
+        return
+
+    trailing_row_count = worksheet.max_row - last_data_row
+    if trailing_row_count > 0:
+        worksheet.delete_rows(last_data_row + 1, trailing_row_count)
+
+    last_relevant_column = _find_last_relevant_column(worksheet)
+    worksheet.print_area = f"A1:{get_column_letter(last_relevant_column)}{last_data_row}"
+    worksheet.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True, autoPageBreaks=False)
+    worksheet.page_setup.fitToWidth = 1
+    worksheet.page_setup.fitToHeight = 0
+    worksheet.print_options.horizontalCentered = True
+    worksheet.print_options.verticalCentered = False
+
+
+def _clear_summary_side_fill(worksheet: Any) -> None:
+    last_data_row = _find_last_non_empty_row(worksheet)
+    last_value_column = _find_last_non_empty_value_column(worksheet)
+    last_relevant_column = _find_last_relevant_column(worksheet)
+
+    if last_data_row <= 0 or last_relevant_column <= last_value_column:
+        return
+
+    empty_fill = PatternFill(fill_type=None)
+    for row in range(1, last_data_row + 1):
+        for column in range(last_value_column + 1, last_relevant_column + 1):
+            cell = worksheet.cell(row=row, column=column)
+            if cell.value not in (None, ""):
+                continue
+            cell.fill = empty_fill
+
+
+def _find_last_non_empty_row(worksheet: Any) -> int:
+    last_row = 0
+    for row in worksheet.iter_rows():
+        if any(cell.value not in (None, "") for cell in row):
+            last_row = row[0].row
+    return last_row
+
+
+def _find_last_non_empty_value_column(worksheet: Any) -> int:
+    last_column = 1
+    for row in worksheet.iter_rows():
+        for cell in row:
+            if cell.value not in (None, ""):
+                last_column = max(last_column, cell.column)
+    return last_column
+
+
+def _find_last_relevant_column(worksheet: Any) -> int:
+    if worksheet.title == "Síntese":
+        return max(2, _find_last_non_empty_value_column(worksheet))
+
+    last_column = 1
+
+    for row in worksheet.iter_rows():
+        for cell in row:
+            if cell.value not in (None, ""):
+                last_column = max(last_column, cell.column)
+
+    for merged_range in worksheet.merged_cells.ranges:
+        last_column = max(last_column, merged_range.max_col)
+
+    for graphic in [*getattr(worksheet, "_images", []), *getattr(worksheet, "_charts", [])]:
+        anchor = getattr(graphic, "anchor", None)
+        if hasattr(anchor, "_to") and getattr(anchor, "_to", None) is not None:
+            last_column = max(last_column, anchor._to.col + 1)
+            continue
+        if hasattr(anchor, "_from"):
+            last_column = max(last_column, anchor._from.col + 1 + 6)
+
+    return last_column
 
 
 def _build_neopi_summary_lines(bundle: dict[str, Any], draft: dict[str, Any]) -> list[str]:
