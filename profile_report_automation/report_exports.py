@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
 import re
+import shutil
 import subprocess
+import tempfile
 import unicodedata
 from pathlib import Path
 from typing import Any
@@ -64,10 +67,11 @@ def export_local_reports(
     pdf_path = target_dir / f"{base_name}.pdf"
 
     build_docx_report(docx_path, bundle, draft)
-    if workbook_path:
-        build_pdf_from_workbook(pdf_path, workbook_path)
-    else:
-        build_pdf_report(pdf_path, bundle, draft)
+    if not workbook_path:
+        raise RuntimeError(
+            "A geracao de PDF exige a planilha final preenchida. O PDF alternativo foi desativado."
+        )
+    build_pdf_from_workbook(pdf_path, workbook_path)
 
     return {
         "docx": str(docx_path.resolve()),
@@ -170,158 +174,19 @@ def build_docx_report(path: Path, bundle: dict[str, Any], draft: dict[str, Any])
 
 
 def build_pdf_report(path: Path, bundle: dict[str, Any], draft: dict[str, Any]) -> None:
-    _register_pdf_fonts()
-
-    doc = SimpleDocTemplate(
-        str(path),
-        pagesize=A4,
-        leftMargin=18 * mm,
-        rightMargin=18 * mm,
-        topMargin=16 * mm,
-        bottomMargin=15 * mm,
+    raise RuntimeError(
+        "A geracao de PDF alternativo foi desativada. O PDF deve ser exportado a partir da planilha final."
     )
-    styles = _build_pdf_styles()
-    draft_sections = _draft_sections_by_key(draft)
-    story: list[Any] = []
-
-    story.append(Paragraph("ANALISE DE PERFIL COMPORTAMENTAL", styles["title"]))
-    story.append(Spacer(1, 5 * mm))
-
-    story.append(Paragraph("I. Identificacao:", styles["heading"]))
-    story.extend(_build_pdf_identification(bundle, styles))
-    story.append(Spacer(1, 3 * mm))
-
-    story.append(Paragraph("II. Metodologia e objetivo:", styles["heading"]))
-    story.append(Paragraph(METHODOLOGY_TEXT, styles["body"]))
-    story.append(Spacer(1, 3 * mm))
-
-    story.append(Paragraph("III. Resultados da Analise:", styles["heading"]))
-    story.extend(
-        _build_pdf_subsection(
-            "3.1- NEO PI-R",
-            SECTION_INTROS["neopi"],
-            _build_neopi_paragraphs(bundle, draft_sections),
-            styles,
-        )
-    )
-    story.append(
-        _build_pdf_table(
-            ["Fator", "Categoria", "T score"],
-            [
-                [item["domain"], _title_case(str(item["category"])), str(item["t_score"])]
-                for item in bundle.get("neopi", {}).get("domains", [])
-                if item.get("citation_candidate")
-            ],
-        )
-    )
-    story.append(Spacer(1, 3 * mm))
-
-    story.extend(
-        _build_pdf_subsection(
-            "3.2- Profiler",
-            SECTION_INTROS["profiler"] + _build_profiler_intro(bundle),
-            _build_section_paragraphs("profiler", bundle, draft_sections),
-            styles,
-        )
-    )
-    story.append(
-        _build_pdf_table(
-            ["Estilo", "Percentual"],
-            [[item["style"], f"{item['percentage']:.2f}%"] for item in bundle.get("profiler", {}).get("scores", [])],
-        )
-    )
-    story.append(Spacer(1, 3 * mm))
-
-    story.extend(
-        _build_pdf_subsection(
-            "3.3- Ancoras de Carreira",
-            SECTION_INTROS["career_anchors"],
-            _build_section_paragraphs("career_anchors", bundle, draft_sections),
-            styles,
-        )
-    )
-    story.append(
-        _build_pdf_table(
-            ["Ancora", "Media"],
-            [[item["name"], str(item["average"])] for item in bundle.get("career_anchors", {}).get("scores", [])],
-        )
-    )
-    story.append(Spacer(1, 3 * mm))
-
-    story.extend(
-        _build_pdf_subsection(
-            "3.4- Diagnostico Cultural",
-            SECTION_INTROS["cultural_diagnosis"],
-            _build_section_paragraphs("cultural_diagnosis", bundle, draft_sections),
-            styles,
-        )
-    )
-    story.append(
-        _build_pdf_table(
-            ["Cultura", "Pontuacao"],
-            [[item["culture"], f"{item['score']:.2f}"] for item in bundle.get("cultural_diagnosis", {}).get("scores", [])],
-        )
-    )
-    story.append(Spacer(1, 3 * mm))
-
-    story.append(Paragraph("IV. Conclusao:", styles["heading"]))
-    story.append(Paragraph("A partir dos indicadores de seu perfil, destacam-se os seguintes pontos:", styles["body"]))
-    bullets = _build_conclusion_bullets(bundle, draft_sections)
-    if bullets:
-        story.append(
-            ListFlowable(
-                [ListItem(Paragraph(item, styles["body"])) for item in bullets],
-                bulletType="1",
-                leftIndent=16,
-            )
-        )
-
-    doc.build(story, onFirstPage=_draw_pdf_footer, onLaterPages=_draw_pdf_footer)
 
 
 def build_pdf_from_workbook(path: Path, workbook_path: str | Path) -> None:
     if _export_workbook_sheet_via_excel(path, workbook_path):
         return
-
-    _register_pdf_fonts()
-
-    workbook = load_workbook(filename=Path(workbook_path), data_only=True)
-    visible_sheets = _preferred_pdf_worksheets(workbook)
-    margins = _worksheet_pdf_margins(visible_sheets[0]) if visible_sheets else (18 * mm, 18 * mm, 16 * mm, 15 * mm)
-    doc = SimpleDocTemplate(
-        str(path),
-        pagesize=A4,
-        leftMargin=margins[0],
-        rightMargin=margins[1],
-        topMargin=margins[2],
-        bottomMargin=margins[3],
+    if _export_workbook_sheet_via_libreoffice(path, workbook_path):
+        return
+    raise RuntimeError(
+        "Nao foi possivel exportar o PDF a partir da planilha final. A geracao de PDF alternativo foi desativada."
     )
-    styles = _build_pdf_styles()
-    story: list[Any] = []
-    rendered_sheet_count = 0
-    for worksheet in visible_sheets:
-        rows = _extract_nonempty_worksheet_rows(worksheet)
-        if not rows:
-            continue
-
-        if rendered_sheet_count > 0:
-            story.append(PageBreak())
-        if len(visible_sheets) > 1:
-            story.append(Paragraph(escape(worksheet.title), styles["sheetheading"]))
-            story.append(Spacer(1, 2 * mm))
-        story.extend(
-            _build_pdf_story_from_worksheet_rows(
-                rows,
-                styles,
-                honor_page_break_markers=_is_summary_sheet(worksheet.title),
-            )
-        )
-        rendered_sheet_count += 1
-
-    if rendered_sheet_count == 0:
-        story.append(Paragraph("Nenhum conteudo preenchido foi encontrado na planilha.", styles["body"]))
-
-    doc.build(story)
 
 
 def _export_workbook_sheet_via_excel(path: Path, workbook_path: str | Path) -> bool:
@@ -357,6 +222,95 @@ def _export_workbook_sheet_via_excel(path: Path, workbook_path: str | Path) -> b
         return False
 
     return target.exists() and target.stat().st_size > 0 and "PDF_EXPORTED" in completed.stdout
+
+
+def _export_workbook_sheet_via_libreoffice(path: Path, workbook_path: str | Path) -> bool:
+    soffice_path = shutil.which("soffice") or shutil.which("libreoffice")
+    if not soffice_path:
+        return False
+
+    source_workbook = Path(workbook_path).expanduser().resolve()
+    if not source_workbook.exists():
+        raise FileNotFoundError(f"Planilha nao encontrada para exportacao em PDF: {source_workbook}")
+
+    target_pdf = Path(path).expanduser().resolve()
+    target_pdf.parent.mkdir(parents=True, exist_ok=True)
+    if target_pdf.exists():
+        target_pdf.unlink()
+
+    with tempfile.TemporaryDirectory(prefix="xlsx-pdf-export-") as tmp_dir_raw:
+        tmp_dir = Path(tmp_dir_raw)
+        export_workbook = _build_pdf_export_workbook(source_workbook, tmp_dir)
+        output_dir = tmp_dir / "out"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        profile_dir = tmp_dir / "libreoffice-profile"
+        profile_dir.mkdir(parents=True, exist_ok=True)
+
+        command = [
+            soffice_path,
+            "--headless",
+            "--nologo",
+            "--nodefault",
+            "--nofirststartwizard",
+            "--nolockcheck",
+            "--norestore",
+            f"-env:UserInstallation={profile_dir.resolve().as_uri()}",
+            "--convert-to",
+            "pdf:calc_pdf_Export",
+            "--outdir",
+            str(output_dir),
+            str(export_workbook),
+        ]
+
+        completed = subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "HOME": str(tmp_dir),
+            },
+        )
+
+        generated_pdf = output_dir / f"{export_workbook.stem}.pdf"
+        if not generated_pdf.exists() or generated_pdf.stat().st_size <= 0:
+            stdout = (completed.stdout or "").strip()
+            stderr = (completed.stderr or "").strip()
+            details = stderr or stdout or "LibreOffice nao gerou o arquivo PDF esperado."
+            raise RuntimeError(details)
+
+        shutil.move(str(generated_pdf), str(target_pdf))
+
+    return target_pdf.exists() and target_pdf.stat().st_size > 0
+
+
+def _build_pdf_export_workbook(source_workbook: Path, temp_dir: Path) -> Path:
+    workbook = load_workbook(filename=source_workbook)
+    preferred_sheet = _preferred_pdf_worksheets(workbook)
+    worksheet_to_keep = preferred_sheet[0] if preferred_sheet else workbook.worksheets[0]
+
+    for worksheet in list(workbook.worksheets):
+        if worksheet.title != worksheet_to_keep.title:
+            del workbook[worksheet.title]
+
+    worksheet_to_keep = workbook.worksheets[0]
+    _normalize_pdf_export_worksheet(worksheet_to_keep)
+    workbook.active = 0
+    export_workbook = temp_dir / source_workbook.name
+    workbook.save(export_workbook)
+    return export_workbook
+
+
+def _normalize_pdf_export_worksheet(worksheet: Any) -> None:
+    worksheet.sheet_state = "visible"
+    worksheet.page_setup.zoom = False
+    worksheet.page_setup.fitToWidth = 1
+    worksheet.page_setup.fitToHeight = 0
+    worksheet.print_options.horizontalCentered = True
+    worksheet.print_options.verticalCentered = False
+    worksheet.row_breaks.brk = []
+    worksheet.col_breaks.brk = []
 
 
 def _draw_pdf_footer(canvas: Any, document: Any) -> None:
