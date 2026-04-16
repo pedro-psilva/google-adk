@@ -11,8 +11,13 @@ from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.properties import PageSetupProperties
-import pythoncom
-from win32com.client import DispatchEx
+
+try:
+    import pythoncom
+    from win32com.client import DispatchEx
+except ImportError:  # pragma: no cover - optional on non-Windows runtimes
+    pythoncom = None
+    DispatchEx = None
 
 from profile_report_automation.neopi_language import (
     NEOPI_DISPLAY_LABELS,
@@ -70,6 +75,9 @@ def export_filled_workbook(
 
 
 def export_workbook_pdf(workbook_path: str | Path) -> str:
+    if pythoncom is None or DispatchEx is None:
+        raise RuntimeError("A exportacao de PDF via automacao do Excel so esta disponivel em Windows com pywin32.")
+
     source_path = Path(workbook_path).expanduser().resolve()
     if not source_path.exists():
         raise FileNotFoundError(f"Planilha nao encontrada para exportacao em PDF: {source_path}")
