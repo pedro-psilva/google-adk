@@ -8,10 +8,14 @@ services:
       GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
       GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-}
       VERTEX_MODEL: ${VERTEX_MODEL:-gemini-2.5-flash}
+      PDF_EXPORT_WORKER_URL: ${PDF_EXPORT_WORKER_URL:-http://host.docker.internal:8010}
+      PDF_EXPORT_WORKER_TIMEOUT_SECONDS: ${PDF_EXPORT_WORKER_TIMEOUT_SECONDS:-180}
     ports:
       - "8000:8000"
     volumes:
       - ./artifacts:/app/artifacts
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
       interval: 15s

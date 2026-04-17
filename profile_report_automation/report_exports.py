@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-import os
 import re
-import shutil
-import subprocess
-import tempfile
 import unicodedata
 from pathlib import Path
 from typing import Any
@@ -13,7 +9,6 @@ from xml.sax.saxutils import escape
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Cm, Pt
-from openpyxl import load_workbook
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
@@ -24,6 +19,12 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import ListFlowable, ListItem, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from profile_report_automation.neopi_language import NEOPI_DOMAIN_ORDER, rewrite_neopi_synthesis_text
+from profile_report_automation.pdf_export import (
+    PDF_EXPORT_WORKSHEET_NAME,
+    export_workbook_sheet_via_excel,
+    export_workbook_sheet_via_worker,
+    get_pdf_export_worker_url,
+)
 
 
 METHODOLOGY_TEXT = (
@@ -180,137 +181,22 @@ def build_pdf_report(path: Path, bundle: dict[str, Any], draft: dict[str, Any]) 
 
 
 def build_pdf_from_workbook(path: Path, workbook_path: str | Path) -> None:
-    if _export_workbook_sheet_via_excel(path, workbook_path):
+    if export_workbook_sheet_via_excel(path, workbook_path, worksheet_name=PDF_EXPORT_WORKSHEET_NAME):
         return
-    if _export_workbook_sheet_via_libreoffice(path, workbook_path):
+    if export_workbook_sheet_via_worker(path, workbook_path, worksheet_name=PDF_EXPORT_WORKSHEET_NAME):
         return
+
+    worker_url = get_pdf_export_worker_url()
+    if worker_url:
+        raise RuntimeError(
+            "Nao foi possivel exportar o PDF com fidelidade ao Excel, mesmo com o worker configurado. "
+            "Verifique se o worker Windows esta ativo e se o Microsoft Excel esta disponivel para automacao."
+        )
+
     raise RuntimeError(
-        "Nao foi possivel exportar o PDF a partir da planilha final. A geracao de PDF alternativo foi desativada."
+        "Nao foi possivel exportar o PDF com fidelidade ao Excel. Execute o backend em Windows com Microsoft Excel "
+        "ou inicie o worker Windows configurando PDF_EXPORT_WORKER_URL."
     )
-
-
-def _export_workbook_sheet_via_excel(path: Path, workbook_path: str | Path) -> bool:
-    script_path = Path(__file__).resolve().parents[1] / "scripts" / "export_excel_sheet_to_pdf.ps1"
-    if not script_path.exists():
-        return False
-
-    workbook = Path(workbook_path).resolve()
-    target = Path(path).resolve()
-
-    command = [
-        "powershell",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        str(script_path),
-        "-WorkbookPath",
-        str(workbook),
-        "-PdfPath",
-        str(target),
-        "-WorksheetName",
-        "Síntese",
-    ]
-
-    try:
-        completed = subprocess.run(
-            command,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return False
-
-    return target.exists() and target.stat().st_size > 0 and "PDF_EXPORTED" in completed.stdout
-
-
-def _export_workbook_sheet_via_libreoffice(path: Path, workbook_path: str | Path) -> bool:
-    soffice_path = shutil.which("soffice") or shutil.which("libreoffice")
-    if not soffice_path:
-        return False
-
-    source_workbook = Path(workbook_path).expanduser().resolve()
-    if not source_workbook.exists():
-        raise FileNotFoundError(f"Planilha nao encontrada para exportacao em PDF: {source_workbook}")
-
-    target_pdf = Path(path).expanduser().resolve()
-    target_pdf.parent.mkdir(parents=True, exist_ok=True)
-    if target_pdf.exists():
-        target_pdf.unlink()
-
-    with tempfile.TemporaryDirectory(prefix="xlsx-pdf-export-") as tmp_dir_raw:
-        tmp_dir = Path(tmp_dir_raw)
-        export_workbook = _build_pdf_export_workbook(source_workbook, tmp_dir)
-        output_dir = tmp_dir / "out"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        profile_dir = tmp_dir / "libreoffice-profile"
-        profile_dir.mkdir(parents=True, exist_ok=True)
-
-        command = [
-            soffice_path,
-            "--headless",
-            "--nologo",
-            "--nodefault",
-            "--nofirststartwizard",
-            "--nolockcheck",
-            "--norestore",
-            f"-env:UserInstallation={profile_dir.resolve().as_uri()}",
-            "--convert-to",
-            "pdf:calc_pdf_Export",
-            "--outdir",
-            str(output_dir),
-            str(export_workbook),
-        ]
-
-        completed = subprocess.run(
-            command,
-            check=True,
-            capture_output=True,
-            text=True,
-            env={
-                **os.environ,
-                "HOME": str(tmp_dir),
-            },
-        )
-
-        generated_pdf = output_dir / f"{export_workbook.stem}.pdf"
-        if not generated_pdf.exists() or generated_pdf.stat().st_size <= 0:
-            stdout = (completed.stdout or "").strip()
-            stderr = (completed.stderr or "").strip()
-            details = stderr or stdout or "LibreOffice nao gerou o arquivo PDF esperado."
-            raise RuntimeError(details)
-
-        shutil.move(str(generated_pdf), str(target_pdf))
-
-    return target_pdf.exists() and target_pdf.stat().st_size > 0
-
-
-def _build_pdf_export_workbook(source_workbook: Path, temp_dir: Path) -> Path:
-    workbook = load_workbook(filename=source_workbook)
-    preferred_sheet = _preferred_pdf_worksheets(workbook)
-    worksheet_to_keep = preferred_sheet[0] if preferred_sheet else workbook.worksheets[0]
-
-    for worksheet in list(workbook.worksheets):
-        if worksheet.title != worksheet_to_keep.title:
-            del workbook[worksheet.title]
-
-    worksheet_to_keep = workbook.worksheets[0]
-    _normalize_pdf_export_worksheet(worksheet_to_keep)
-    workbook.active = 0
-    export_workbook = temp_dir / source_workbook.name
-    workbook.save(export_workbook)
-    return export_workbook
-
-
-def _normalize_pdf_export_worksheet(worksheet: Any) -> None:
-    worksheet.sheet_state = "visible"
-    worksheet.page_setup.zoom = False
-    worksheet.page_setup.fitToWidth = 1
-    worksheet.page_setup.fitToHeight = 0
-    worksheet.print_options.horizontalCentered = True
-    worksheet.print_options.verticalCentered = False
-    worksheet.row_breaks.brk = []
-    worksheet.col_breaks.brk = []
 
 
 def _draw_pdf_footer(canvas: Any, document: Any) -> None:

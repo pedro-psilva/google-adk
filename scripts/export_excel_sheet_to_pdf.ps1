@@ -15,9 +15,34 @@ $workbook = $null
 $worksheet = $null
 $usedRange = $null
 
+function Normalize-LookupText {
+    param(
+        [AllowNull()]
+        [string]$Value
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return ""
+    }
+
+    $normalized = $Value.Normalize([Text.NormalizationForm]::FormD)
+    $builder = New-Object System.Text.StringBuilder
+
+    foreach ($character in $normalized.ToCharArray()) {
+        $unicodeCategory = [Globalization.CharUnicodeInfo]::GetUnicodeCategory($character)
+        if ($unicodeCategory -eq [Globalization.UnicodeCategory]::NonSpacingMark) {
+            continue
+        }
+        [void]$builder.Append([char]::ToLowerInvariant($character))
+    }
+
+    return (($builder.ToString()) -replace "\s+", " ").Trim()
+}
+
 try {
     $resolvedWorkbookPath = (Resolve-Path -LiteralPath $WorkbookPath).Path
-    $targetDirectory = Split-Path -Parent $PdfPath
+    $resolvedPdfPath = [System.IO.Path]::GetFullPath($PdfPath)
+    $targetDirectory = Split-Path -Parent $resolvedPdfPath
     if ($targetDirectory -and -not (Test-Path -LiteralPath $targetDirectory)) {
         New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
     }
@@ -28,9 +53,10 @@ try {
     $excel.ScreenUpdating = $false
 
     $workbook = $excel.Workbooks.Open($resolvedWorkbookPath, $null, $true)
+    $normalizedWorksheetName = Normalize-LookupText -Value $WorksheetName
 
     foreach ($sheet in $workbook.Worksheets) {
-        if ($sheet.Name -eq $WorksheetName) {
+        if ((Normalize-LookupText -Value $sheet.Name) -eq $normalizedWorksheetName) {
             $worksheet = $sheet
             break
         }
@@ -91,7 +117,7 @@ try {
         $worksheet.PageSetup.FitToPagesTall = $false
     }
 
-    $worksheet.ExportAsFixedFormat(0, $PdfPath)
+    $worksheet.ExportAsFixedFormat(0, $resolvedPdfPath)
     Write-Output "PDF_EXPORTED"
 }
 finally {
