@@ -312,8 +312,9 @@ export function WorkflowPage() {
   const missingConclusion =
     coverage?.required_signals.filter((item) => item.importance === "required" && !item.coverage.conclusion.covered) ?? [];
   const mediumMentions = coverage?.possible_medium_mentions ?? [];
-  const localXlsxPath = pipelineResult?.artifacts.local_report_xlsx ?? null;
+  const localDocxPath = pipelineResult?.artifacts.local_report_docx ?? null;
   const localPdfPath = pipelineResult?.artifacts.local_report_pdf ?? null;
+  const hasFinalReports = Boolean(localDocxPath || localPdfPath);
   const attentionItems = buildNeopiAttentionItems(bundle);
   const selectedCount = intakeSlots.filter((slot) => selectedFiles[slot.id]).length;
   const canRunAutomation = selectedCount === intakeSlots.length;
@@ -330,9 +331,9 @@ export function WorkflowPage() {
       <section className="surface surface--hero workflow-hero workflow-hero--compact">
         <div className="workflow-hero__content">
           <p className="workflow-hero__eyebrow">Análise de perfil</p>
-          <h1 className="workflow-hero__title">Selecione os 3 arquivos e gere a planilha final.</h1>
+          <h1 className="workflow-hero__title">Selecione os 3 arquivos e gere o relatório final.</h1>
           <p className="workflow-hero__description">
-            Escolha um arquivo em cada card e a geração cuida do envio e da análise em sequência.
+            Escolha um arquivo em cada card e a geração cuida do envio, da análise e da montagem final em sequência.
           </p>
 
           <div className="workflow-hero__badges">
@@ -340,7 +341,7 @@ export function WorkflowPage() {
             <Badge tone={uploadedSelectionMatches ? "success" : canRunAutomation ? "neutral" : "warning"}>
               {uploadedSelectionMatches ? "Base atualizada" : canRunAutomation ? "Pronto para gerar" : `${selectedCount}/3 selecionados`}
             </Badge>
-            <Badge tone={localXlsxPath ? "success" : "neutral"}>{localXlsxPath ? "Excel pronto" : "Aguardando geração"}</Badge>
+            <Badge tone={localDocxPath ? "success" : "neutral"}>{localDocxPath ? "Word pronto" : "Aguardando geração"}</Badge>
           </div>
         </div>
 
@@ -360,8 +361,8 @@ export function WorkflowPage() {
           <MetricCard
             label="Última ação"
             value={lastAction}
-            detail={localXlsxPath ? "A planilha final já pode ser baixada." : "Depois da análise, a planilha final aparece aqui."}
-            tone={localXlsxPath ? "success" : "neutral"}
+            detail={localDocxPath ? "O Word final já pode ser baixado." : "Depois da análise, o Word final aparece aqui."}
+            tone={localDocxPath ? "success" : "neutral"}
           />
         </div>
       </section>
@@ -577,24 +578,24 @@ export function WorkflowPage() {
             <p className="panel-heading__eyebrow">Saída</p>
             <h2 className="panel-heading__title">Arquivos finais</h2>
           </div>
-          <Badge tone={localXlsxPath || localPdfPath ? "success" : "neutral"}>
-            {localXlsxPath || localPdfPath ? "pronto" : "aguardando"}
+          <Badge tone={hasFinalReports ? "success" : "neutral"}>
+            {hasFinalReports ? "pronto" : "aguardando"}
           </Badge>
         </div>
 
         <div className="workflow-delivery-grid">
           <article className="workflow-review-card">
             <h3>Downloads</h3>
-            {localXlsxPath || localPdfPath ? (
+            {hasFinalReports ? (
               <div className="workflow-link-row">
-                {localXlsxPath ? (
+                {localDocxPath ? (
                   <a
                     className="workflow-link-chip"
-                    href={buildDownloadUrl(apiBaseUrl, localXlsxPath)}
+                    href={buildDownloadUrl(apiBaseUrl, localDocxPath)}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Baixar Excel
+                    Baixar Word
                   </a>
                 ) : null}
                 {localPdfPath ? (
@@ -609,16 +610,16 @@ export function WorkflowPage() {
                 ) : null}
               </div>
             ) : (
-              <p className="empty-state">Depois da análise, o Excel e o PDF da planilha aparecem aqui para download.</p>
+              <p className="empty-state">Depois da análise, os arquivos finais em Word e PDF aparecem aqui para download.</p>
             )}
           </article>
 
           <article className="workflow-review-card">
             <h3>Resultado esperado</h3>
-            {localXlsxPath ? (
-              <p className="empty-state">A planilha modelo foi preenchida e o PDF é gerado a partir desse mesmo Excel.</p>
+            {localDocxPath ? (
+              <p className="empty-state">O Word final é o artefato principal desta branch, preservando logo, gráficos e a estrutura visual do relatório. O PDF segue disponível como versão complementar.</p>
             ) : (
-              <p className="empty-state">O foco desta tela é devolver o Excel final e sua versão em PDF, preservando o layout da planilha.</p>
+              <p className="empty-state">Nesta branch, a entrega final não depende de Excel. O foco é gerar um Word fiel ao relatório, com logo, gráficos e PDF complementar.</p>
             )}
           </article>
         </div>

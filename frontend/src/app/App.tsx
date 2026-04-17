@@ -33,7 +33,7 @@ export function App() {
           <span className="brand-button__mark">PA</span>
           <span className="brand-button__copy">
             <strong>Análise de Perfil</strong>
-            <span>Arquivos, revisão automática e planilha final</span>
+            <span>Arquivos, revisão automática e relatório final</span>
           </span>
         </div>
 

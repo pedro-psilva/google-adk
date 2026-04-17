@@ -10,7 +10,6 @@ from profile_backend.application.ports import (
 )
 from profile_backend.domain.models import PipelineArtifacts, PipelineRequest, PipelineResult
 from profile_report_automation.report_exports import export_local_reports
-from profile_report_automation.workbook_exports import export_filled_workbook
 
 
 def run_pipeline(
@@ -42,13 +41,11 @@ def run_pipeline(
         live_draft_path = None
         used_live_vertex = False
 
-    workbook_report_path = export_filled_workbook(output_dir, resolved_bundle.bundle, coverage, draft)
     local_reports = export_local_reports(
         output_dir,
         resolved_bundle.bundle,
         coverage,
         draft,
-        workbook_path=workbook_report_path,
     )
 
     result = PipelineResult(
@@ -60,7 +57,7 @@ def run_pipeline(
             coverage_report=str(coverage_path.resolve()),
             vertex_request_preview=str(preview_path.resolve()),
             draft_output=str(draft_path.resolve()),
-            local_report_xlsx=str(Path(workbook_report_path).resolve()),
+            local_report_xlsx=None,
             local_report_docx=local_reports.get("docx"),
             local_report_pdf=local_reports.get("pdf"),
             live_draft=str(live_draft_path.resolve()) if live_draft_path else None,

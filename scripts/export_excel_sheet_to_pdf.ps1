@@ -67,55 +67,15 @@ try {
     }
 
     $usedRange = $worksheet.UsedRange
-    $values = $usedRange.Value2
-    $minRowOffset = $null
-    $maxRowOffset = $null
-    $minColumnOffset = $null
-    $maxColumnOffset = $null
-
-    function Update-Bounds {
-        param(
-            [int]$RowOffset,
-            [int]$ColumnOffset
-        )
-
-        if ($null -eq $minRowOffset -or $RowOffset -lt $minRowOffset) { $script:minRowOffset = $RowOffset }
-        if ($null -eq $maxRowOffset -or $RowOffset -gt $maxRowOffset) { $script:maxRowOffset = $RowOffset }
-        if ($null -eq $minColumnOffset -or $ColumnOffset -lt $minColumnOffset) { $script:minColumnOffset = $ColumnOffset }
-        if ($null -eq $maxColumnOffset -or $ColumnOffset -gt $maxColumnOffset) { $script:maxColumnOffset = $ColumnOffset }
+    if ([string]::IsNullOrWhiteSpace($worksheet.PageSetup.PrintArea)) {
+        $worksheet.PageSetup.PrintArea = $usedRange.Address($false, $false)
     }
 
-    if ($values -is [System.Array]) {
-        $rowCount = $values.GetLength(0)
-        $columnCount = $values.GetLength(1)
-        for ($rowIndex = 1; $rowIndex -le $rowCount; $rowIndex++) {
-            for ($columnIndex = 1; $columnIndex -le $columnCount; $columnIndex++) {
-                $cellValue = $values.GetValue($rowIndex, $columnIndex)
-                if ($null -eq $cellValue) { continue }
-                if ($cellValue -is [string] -and [string]::IsNullOrWhiteSpace($cellValue)) { continue }
-                Update-Bounds -RowOffset $rowIndex -ColumnOffset $columnIndex
-            }
-        }
-    }
-    elseif ($null -ne $values -and -not [string]::IsNullOrWhiteSpace([string]$values)) {
-        Update-Bounds -RowOffset 1 -ColumnOffset 1
-    }
-
-    if ($null -ne $minRowOffset) {
-        $firstRow = $usedRange.Row + $minRowOffset - 1
-        $lastRow = $usedRange.Row + $maxRowOffset - 1
-        $firstColumn = $usedRange.Column + $minColumnOffset - 1
-        $lastColumn = $usedRange.Column + $maxColumnOffset - 1
-
-        $topLeft = $worksheet.Cells.Item($firstRow, $firstColumn)
-        $bottomRight = $worksheet.Cells.Item($lastRow, $lastColumn)
-        $printRange = $worksheet.Range($topLeft, $bottomRight)
-
-        $worksheet.PageSetup.PrintArea = $printRange.Address($false, $false)
-        $worksheet.PageSetup.Zoom = $false
-        $worksheet.PageSetup.FitToPagesWide = 1
-        $worksheet.PageSetup.FitToPagesTall = $false
-    }
+    $worksheet.PageSetup.CenterHorizontally = $true
+    $worksheet.PageSetup.CenterVertically = $false
+    $worksheet.PageSetup.Zoom = $false
+    $worksheet.PageSetup.FitToPagesWide = 1
+    $worksheet.PageSetup.FitToPagesTall = $false
 
     $worksheet.ExportAsFixedFormat(0, $resolvedPdfPath)
     Write-Output "PDF_EXPORTED"

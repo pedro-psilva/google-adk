@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from copy import copy
+import math
 import re
+import textwrap
 import unicodedata
 from datetime import datetime
 from pathlib import Path
@@ -42,6 +44,34 @@ STATIC_SIGNATURE_PATTERNS = [
     re.compile(r"carolina de oliveira giarola", flags=re.IGNORECASE),
     re.compile(r"crp\s*-\s*04\s*/\s*81762", flags=re.IGNORECASE),
 ]
+
+SUMMARY_DYNAMIC_TEXT_ROWS = [
+    7,
+    8,
+    9,
+    10,
+    11,
+    21,
+    22,
+    23,
+    24,
+    25,
+    37,
+    38,
+    52,
+    53,
+    71,
+    72,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+]
+SUMMARY_ROW_BASE_HEIGHT = 15.75
+SUMMARY_ROW_LINE_HEIGHT = 15.75
+SUMMARY_ROW_EXTRA_PADDING = 2.5
 
 
 def export_filled_workbook(
@@ -234,6 +264,7 @@ def _fill_summary_sheet(workbook: Any, bundle: dict[str, Any], draft: dict[str, 
         else:
             ws[f"B{row}"] = ""
 
+    _fit_summary_sheet_text_rows(ws)
     _clear_summary_side_fill(ws)
 
 
@@ -396,6 +427,47 @@ def _clear_summary_side_fill(worksheet: Any) -> None:
             cell.fill = empty_fill
 
 
+def _fit_summary_sheet_text_rows(worksheet: Any) -> None:
+    for row in SUMMARY_DYNAMIC_TEXT_ROWS:
+        cell = worksheet[f"B{row}"]
+        text = str(cell.value or "").strip()
+        if not text:
+            continue
+
+        alignment = copy(cell.alignment)
+        alignment.wrap_text = True
+        alignment.vertical = "top"
+        cell.alignment = alignment
+
+        current_height = worksheet.row_dimensions[row].height or SUMMARY_ROW_BASE_HEIGHT
+        estimated_height = _estimate_summary_row_height(worksheet, text)
+        worksheet.row_dimensions[row].height = max(current_height, estimated_height)
+
+
+def _estimate_summary_row_height(worksheet: Any, text: str) -> float:
+    column_width = worksheet.column_dimensions["B"].width or 80
+    wrap_width = max(28, int(math.floor(column_width - 3)))
+    line_count = 0
+
+    for raw_line in text.splitlines() or [text]:
+        stripped_line = raw_line.strip()
+        if not stripped_line:
+            line_count += 1
+            continue
+        wrapped_lines = textwrap.wrap(
+            stripped_line,
+            width=wrap_width,
+            break_long_words=False,
+            break_on_hyphens=False,
+        )
+        line_count += max(1, len(wrapped_lines))
+
+    return max(
+        SUMMARY_ROW_BASE_HEIGHT,
+        (line_count * SUMMARY_ROW_LINE_HEIGHT) + SUMMARY_ROW_EXTRA_PADDING,
+    )
+
+
 def _find_last_non_empty_row(worksheet: Any) -> int:
     last_row = 0
     for row in worksheet.iter_rows():
@@ -414,9 +486,6 @@ def _find_last_non_empty_value_column(worksheet: Any) -> int:
 
 
 def _find_last_relevant_column(worksheet: Any) -> int:
-    if worksheet.title == "Síntese":
-        return max(2, _find_last_non_empty_value_column(worksheet))
-
     last_column = 1
 
     for row in worksheet.iter_rows():
