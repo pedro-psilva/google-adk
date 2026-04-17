@@ -1,192 +1,138 @@
 # Deploy em Producao
 
-Guia de deploy para manter a geracao do PDF final fiel ao template do Excel.
+Guia de deploy da branch sem dependencia de Windows, Microsoft Excel ou worker auxiliar.
 
 ## Regra principal
 
-No ambiente de producao com backend em Docker/Linux, o worker Windows com Microsoft Excel e obrigatorio.
+Nesta branch, a producao e composta apenas por:
 
-Sem esse worker:
+- `frontend`
+- `backend`
+- volume persistente para `artifacts`
 
-- o backend nao consegue gerar o PDF final com fidelidade ao Excel;
-- o pipeline deve falhar na etapa do PDF;
-- esse comportamento e intencional para evitar a entrega de um PDF torto, desalinhado ou diferente do template oficial.
+O pipeline gera o `.docx` e o `.pdf` diretamente em Python. Nao existe dependencia de:
 
-Em outras palavras: subir apenas os containers nao e suficiente para manter essa funcionalidade em producao.
+- host Windows;
+- Microsoft Excel;
+- worker HTTP de exportacao PDF;
+- storage compartilhado entre Linux e Windows.
 
-## Topologia suportada
+## Topologia recomendada
 
 Arquitetura recomendada:
 
-1. `frontend` publicado normalmente
-2. `backend` rodando em Docker
-3. `worker Windows` rodando fora do container, em uma maquina Windows com Microsoft Excel instalado
-4. `storage compartilhado` entre backend e worker para a pasta de artefatos
+1. `frontend` publicado em container
+2. `backend` publicado em container
+3. volume persistente para `artifacts`
+4. proxy reverso ou load balancer, se necessario pela sua infraestrutura
 
-Fluxo do PDF:
+Fluxo dos artefatos:
 
-1. o backend gera o relatorio final em `.xlsx`
-2. o backend chama o worker via `PDF_EXPORT_WORKER_URL`
-3. o backend informa caminhos relativos dentro de `artifacts`
-4. o worker abre a planilha no Excel e exporta o PDF
-5. o PDF final volta a ficar disponivel na mesma arvore de `artifacts`
+1. o backend recebe os arquivos de entrada
+2. o backend normaliza o bundle
+3. o backend gera `.docx` e `.pdf`
+4. os artefatos finais ficam disponiveis na arvore de `artifacts`
 
 ## O que e obrigatorio
 
-Os itens abaixo sao obrigatorios para o PDF continuar funcionando em producao:
+Os itens abaixo sao obrigatorios para o deploy desta branch:
 
-- um host Windows para o worker;
-- Microsoft Excel instalado nesse host;
-- Python e dependencias do projeto instalados nesse host;
-- visibilidade compartilhada da pasta `artifacts` entre backend e worker;
-- `PDF_EXPORT_WORKER_URL` configurada com a URL real do worker;
-- worker monitorado como servico, com reinicio automatico.
+- Docker Engine ou Docker Desktop
+- uma imagem de backend baseada em Python
+- uma imagem de frontend baseada em Node/Nginx
+- volume persistente para `artifacts`
 
-## O que nao e suportado
+## O que nao e necessario
 
-Os cenarios abaixo nao mantem a funcionalidade do PDF:
+Os itens abaixo nao sao mais necessarios nesta branch:
 
-- backend em Docker/Linux sem worker Windows;
-- uso de LibreOffice como substituto do Excel para o PDF final;
-- `host.docker.internal` como estrategia de producao padrao;
-- backend e worker apontando para arvores diferentes de `artifacts`.
+- VM Windows
+- Microsoft Excel
+- worker Windows
+- `PDF_EXPORT_WORKER_URL`
+- `PDF_EXPORT_WORKER_TIMEOUT_SECONDS`
+- compartilhamento SMB entre backend e outro host
 
 ## Variaveis importantes
 
-### Backend
+O backend usa principalmente:
 
-O backend usa:
+- `APP_ENV`
+- `GOOGLE_CLOUD_PROJECT`
+- `GOOGLE_CLOUD_LOCATION`
+- `VERTEX_MODEL`
 
-- `PDF_EXPORT_WORKER_URL`
-- `PDF_EXPORT_WORKER_TIMEOUT_SECONDS`
-
-Exemplo de producao:
-
-```env
-PDF_EXPORT_WORKER_URL=http://pdf-worker.interno:8010
-PDF_EXPORT_WORKER_TIMEOUT_SECONDS=180
-```
-
-### Worker Windows
-
-O worker usa:
-
-- `PDF_EXPORT_ARTIFACTS_ROOT`
-- `PDF_EXPORT_WORKER_HOST`
-- `PDF_EXPORT_WORKER_PORT`
-
-Exemplo:
-
-```env
-PDF_EXPORT_ARTIFACTS_ROOT=Z:\google-adk\artifacts
-PDF_EXPORT_WORKER_HOST=0.0.0.0
-PDF_EXPORT_WORKER_PORT=8010
-```
-
-## Storage compartilhado
-
-Esse ponto e critico.
-
-Hoje o backend nao envia o arquivo `.xlsx` para o worker por upload HTTP. Ele envia apenas caminhos relativos dentro de `artifacts`. Por isso, backend e worker precisam enxergar o mesmo conteudo fisico.
-
-Exemplo valido:
-
-- backend Docker monta `./artifacts` em `/app/artifacts`
-- worker Windows aponta `PDF_EXPORT_ARTIFACTS_ROOT` para `Z:\google-adk\artifacts`
-- ambos acessam os mesmos arquivos reais
-
-Exemplo de implementacao:
-
-- volume de rede
-- compartilhamento SMB
-- disco montado em ambos os lados
-
-Se backend e worker nao compartilharem a mesma pasta de artefatos, o worker nao encontrara a planilha e o PDF falhara.
-
-## Passo a passo de deploy
-
-### 1. Preparar o host Windows do worker
-
-No servidor ou VM Windows:
-
-- instalar Microsoft Excel;
-- instalar Python;
-- disponibilizar acesso ao repositorio ou a um pacote de deploy do worker;
-- garantir acesso ao storage compartilhado de `artifacts`.
-
-### 2. Instalar o codigo e dependencias no worker
-
-Na raiz do projeto no host Windows:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-### 3. Configurar as variaveis do worker
-
-Defina pelo menos:
-
-```powershell
-$env:PDF_EXPORT_ARTIFACTS_ROOT="Z:\google-adk\artifacts"
-$env:PDF_EXPORT_WORKER_HOST="0.0.0.0"
-$env:PDF_EXPORT_WORKER_PORT="8010"
-```
-
-### 4. Subir o worker
-
-Para teste manual:
-
-```powershell
-cmd.exe /c scripts\start_pdf_export_worker.cmd
-```
-
-Healthcheck esperado:
-
-- `http://127.0.0.1:8010/healthz`
-
-Em producao, prefira rodar esse processo como servico do Windows.
-
-Opcoes recomendadas:
-
-- `NSSM`
-- `Task Scheduler` com restart automatico
-- servico dedicado de execucao da sua infraestrutura
-
-## 5. Publicar backend e frontend
-
-No ambiente Docker do backend:
-
-- publicar a pasta `artifacts` em um volume persistente;
-- garantir que esse volume corresponda ao mesmo storage compartilhado usado pelo worker;
-- configurar a URL real do worker.
-
-Exemplo de configuracao do backend:
+Exemplo minimo:
 
 ```env
 APP_ENV=production
-PDF_EXPORT_WORKER_URL=http://pdf-worker.interno:8010
-PDF_EXPORT_WORKER_TIMEOUT_SECONDS=180
+GOOGLE_CLOUD_PROJECT=
+GOOGLE_CLOUD_LOCATION=
+VERTEX_MODEL=gemini-2.5-flash
 ```
 
-Se usar `docker compose`, ajuste o compose de producao para:
+Observacoes:
 
-- remover a dependencia de `host.docker.internal`;
-- apontar para o hostname ou IP real do worker;
-- manter o volume persistente de `artifacts`.
+- o deploy sobe normalmente sem credenciais do Vertex quando o uso operacional fica em `draft_mode=preview`;
+- configure credenciais do Google apenas se voce pretende usar `draft_mode=live`.
 
-## 6. Validar antes de liberar
+## Passo a passo de deploy
 
-Checklist minimo:
+### 1. Preparar o host
 
-1. backend responde em `/healthz`
-2. worker responde em `/healthz`
-3. backend consegue resolver `PDF_EXPORT_WORKER_URL`
-4. worker consegue enxergar a planilha `.xlsx` dentro de `PDF_EXPORT_ARTIFACTS_ROOT`
-5. pipeline gera `.xlsx`
-6. pipeline gera `.pdf`
-7. PDF final preserva o layout correto do Excel
+No host ou VM de producao:
+
+- instalar Docker;
+- disponibilizar o codigo desta branch;
+- preparar um volume persistente para `artifacts`.
+
+### 2. Configurar o ambiente
+
+Na raiz do projeto, crie um `.env` com pelo menos:
+
+```env
+APP_ENV=production
+GOOGLE_CLOUD_PROJECT=
+GOOGLE_CLOUD_LOCATION=
+VERTEX_MODEL=gemini-2.5-flash
+```
+
+Se for usar `draft_mode=live`, adicione tambem a autenticacao do Google/Vertex conforme a politica da sua infraestrutura.
+
+### 3. Subir os containers
+
+Na raiz do projeto:
+
+```powershell
+docker compose up -d --build
+```
+
+Servicos publicados pelo compose atual:
+
+- backend: `http://127.0.0.1:8000`
+- frontend: `http://127.0.0.1:4173`
+
+### 4. Persistir `artifacts`
+
+O diretorio `./artifacts` deve ficar em storage persistente.
+
+Isso garante retencao de:
+
+- bundles normalizados
+- coverage reports
+- drafts
+- arquivos finais `.docx`
+- arquivos finais `.pdf`
+
+Se a sua infraestrutura usar outro caminho, ajuste o bind mount do `docker-compose.yml`.
+
+### 5. Publicar atras de proxy, se necessario
+
+Se for expor a aplicacao publicamente, o comum e:
+
+- manter o backend interno;
+- publicar o frontend via proxy reverso;
+- encaminhar chamadas `/api` para o backend.
 
 ## Healthchecks
 
@@ -194,57 +140,55 @@ Checklist minimo:
 
 - `GET /healthz`
 
-### Worker
+### Frontend
 
-- `GET /healthz`
+- raiz publicada pelo Nginx do container
 
-Resposta esperada do worker:
+## Checklist antes de liberar
 
-- status `ok`
-- caminho configurado de `artifacts_root`
-- confirmacao de existencia do script de exportacao
+1. `docker compose up -d --build` conclui sem erro
+2. backend responde em `/healthz`
+3. frontend responde na porta publicada
+4. pipeline executa com os 3 arquivos de entrada
+5. o backend gera `.docx`
+6. o backend gera `.pdf`
+7. os artefatos finais ficam salvos em `artifacts/`
 
-## Recomendacoes operacionais
+## Diagnostico rapido
 
-- Restrinja o worker a rede interna.
-- Nao exponha o worker diretamente para a internet.
-- Monitore indisponibilidade do worker.
-- Habilite restart automatico do processo.
-- Garanta permissao de leitura e escrita no storage compartilhado.
-- Teste com um relatorio real antes do go-live.
-
-## Diagnostico rapido de falhas
-
-### O backend gera `.xlsx`, mas falha no `.pdf`
+### O backend sobe, mas o frontend nao abre
 
 Verifique:
 
-- `PDF_EXPORT_WORKER_URL`
-- acessibilidade de rede entre backend e worker
-- healthcheck do worker
-- acesso do worker ao `PDF_EXPORT_ARTIFACTS_ROOT`
-- instalacao e funcionamento do Microsoft Excel
+- build do frontend
+- porta `4173`
+- proxy reverso, se houver
 
-### O worker responde, mas nao gera o PDF
+### O frontend abre, mas a API falha
 
 Verifique:
 
-- se o Excel abre normalmente na conta que executa o worker;
-- se a conta do servico tem permissao de acesso ao storage;
-- se a planilha existe no caminho relativo informado;
-- se a aba esperada esta presente na planilha final.
+- healthcheck do backend
+- porta `8000`
+- regras de proxy/CORS da sua publicacao
 
-### O deploy funciona localmente, mas nao em producao
+### O pipeline roda, mas nao gera arquivos finais
 
-O motivo mais comum e um destes:
+Verifique:
 
-- uso de `host.docker.internal` fora do ambiente local;
-- storage nao compartilhado de verdade;
-- worker rodando com outra conta sem acesso ao Excel ou ao compartilhamento;
-- firewall bloqueando a porta do worker.
+- permissao de escrita em `artifacts`
+- disponibilidade das dependencias Python
+- logs do backend
+
+### Quero usar `draft_mode=live`
+
+Nesse caso, alem do deploy padrao, verifique:
+
+- credenciais do Google disponiveis no container do backend
+- `GOOGLE_CLOUD_PROJECT`
+- `GOOGLE_CLOUD_LOCATION`
+- acesso ao Vertex AI
 
 ## Recomendacao final
 
-Para manter a funcionalidade do PDF em producao, trate o worker Windows como parte obrigatoria da arquitetura, nao como um componente opcional.
-
-Se o objetivo do deploy e preservar a fidelidade visual do relatorio final, o worker com Excel deve entrar no escopo oficial de infraestrutura, monitoramento e operacao.
+Para esta branch, a arquitetura oficial de producao e Linux-friendly e containerizada. Se o objetivo e operar sem Windows/Excel, o compose atual e suficiente como base de deploy e nao exige nenhum componente auxiliar fora dos containers.

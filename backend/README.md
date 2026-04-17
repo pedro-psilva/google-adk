@@ -36,5 +36,5 @@ The analysis routes now execute through deterministic ADK workflows:
 - Keep Vertex SDK usage in infrastructure adapters only.
 - Keep domain and application logic framework-agnostic.
 - Treat the current root-level `profile_report_automation` package as a transitional implementation detail while behavior is migrated inward.
-- The current delivery target is the generated local `.xlsx` file, with optional local `.docx` and `.pdf` artifacts.
+- The current delivery target for this branch is the generated local `.docx` plus `.pdf` artifacts, without Excel as a runtime dependency.
 - The current ADK root agent is a deterministic workflow orchestrator rather than a chat-first agent.
