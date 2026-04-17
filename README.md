@@ -14,6 +14,10 @@ Este projeto:
 
 O PDF final nao usa fallback alternativo. A entrega oficial sempre precisa ser fiel ao template do Excel.
 
+Guia de deploy em producao:
+
+- [`DEPLOY.md`](DEPLOY.md)
+
 ## Requisitos
 
 ### Execucao local no Windows
