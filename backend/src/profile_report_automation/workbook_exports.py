@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import copy
 import math
+import os
 import re
 import textwrap
 import unicodedata
@@ -13,6 +14,8 @@ from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.properties import PageSetupProperties
+
+from profile_report_automation._paths import default_artifacts_root
 
 try:
     import pythoncom
@@ -152,9 +155,9 @@ def _resolve_template_path(bundle: dict[str, Any]) -> Path | None:
 
 
 def _find_cached_template_path() -> Path | None:
-    repo_root = Path(__file__).resolve().parents[1]
-    templates_root = repo_root / "artifacts" / "templates"
-    uploads_root = repo_root / "artifacts" / "uploads"
+    artifacts_root = _artifacts_root()
+    templates_root = artifacts_root / "templates"
+    uploads_root = artifacts_root / "uploads"
 
     template_candidates = [
         path
@@ -173,6 +176,13 @@ def _find_cached_template_path() -> Path | None:
         return max(upload_candidates, key=lambda item: item.stat().st_mtime)
 
     return None
+
+
+def _artifacts_root() -> Path:
+    raw_value = os.getenv("ARTIFACTS_ROOT", "").strip()
+    if raw_value:
+        return Path(raw_value).expanduser().resolve()
+    return default_artifacts_root()
 
 
 def _is_report_template_candidate(path: Path) -> bool:

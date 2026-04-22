@@ -9,17 +9,22 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin
 
+from profile_report_automation._paths import default_artifacts_root, workspace_root
+
 
 PDF_EXPORT_WORKSHEET_NAME = "Síntese"
 DEFAULT_PDF_EXPORT_WORKER_TIMEOUT_SECONDS = 180.0
 
 
 def get_repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return workspace_root()
 
 
 def get_artifacts_root() -> Path:
-    return (get_repo_root() / "artifacts").resolve()
+    raw_value = os.getenv("ARTIFACTS_ROOT", "").strip()
+    if raw_value:
+        return Path(raw_value).expanduser().resolve()
+    return default_artifacts_root()
 
 
 def get_pdf_export_worker_url() -> str | None:
