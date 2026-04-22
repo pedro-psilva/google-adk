@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
+import logging
 import re
 import shutil
 import unicodedata
@@ -13,12 +16,26 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 
 from profile_backend.domain.models import PipelineRequest
 from profile_backend.interfaces.adk.agent import adk_analysis_runner, adk_pipeline_runner
+from profile_backend.infrastructure.artifact_cleanup import (
+    cleanup_managed_artifacts,
+    initialize_upload_lifecycle,
+    mark_upload_delivered,
+)
 from profile_backend.infrastructure.config import settings
+from profile_backend.infrastructure.storage_paths import (
+    resolve_bundle_input,
+    resolve_download_path,
+    resolve_output_dir,
+    templates_root,
+    uploads_root,
+)
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
+LOGGER = logging.getLogger(__name__)
 
 
 class BundlePathRequest(BaseModel):
@@ -27,7 +44,7 @@ class BundlePathRequest(BaseModel):
 
 class PipelineRunRequest(BaseModel):
     bundle_input: str
-    output_dir: str = Field(default="artifacts/production-run")
+    output_dir: str = Field(default="production-run")
     draft_mode: Literal["preview", "live"] = Field(default="preview")
 
 
@@ -73,11 +90,12 @@ async def upload_assessment_files(request: Request) -> dict:
         raise HTTPException(status_code=400, detail="Envie pelo menos um arquivo.")
 
     upload_id = _build_upload_id(label)
-    upload_root = Path("artifacts") / "uploads" / upload_id
+    upload_root = uploads_root() / upload_id
     intake_dir = upload_root / "intake"
     run_dir = upload_root / "run"
     intake_dir.mkdir(parents=True, exist_ok=True)
     run_dir.mkdir(parents=True, exist_ok=True)
+    initialize_upload_lifecycle(upload_root, upload_id=upload_id, label=label)
 
     stored_files: list[dict[str, object]] = []
     used_names: set[str] = set()
@@ -139,10 +157,12 @@ def draft_preview(request: BundlePathRequest) -> dict:
 @app.post("/api/v1/pipeline/run")
 def run_pipeline(request: PipelineRunRequest) -> dict:
     try:
+        resolved_bundle_input = resolve_bundle_input(request.bundle_input)
+        resolved_output_dir = resolve_output_dir(request.output_dir)
         result = adk_pipeline_runner.run(
             PipelineRequest(
-                bundle_input=request.bundle_input,
-                output_dir=request.output_dir,
+                bundle_input=str(resolved_bundle_input),
+                output_dir=str(resolved_output_dir),
                 draft_mode=request.draft_mode,
             )
         )
@@ -153,13 +173,13 @@ def run_pipeline(request: PipelineRunRequest) -> dict:
 
 @app.get("/api/v1/files/download")
 def download_generated_file(path: str = Query(..., min_length=1)) -> FileResponse:
-    resolved_path = Path(path).expanduser().resolve()
-    artifacts_root = (Path(__file__).resolve().parents[5] / "artifacts").resolve()
+    try:
+        resolved_path = resolve_download_path(path)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     if not resolved_path.exists() or not resolved_path.is_file():
         raise HTTPException(status_code=404, detail="Arquivo nao encontrado.")
-    if not resolved_path.is_relative_to(artifacts_root):
-        raise HTTPException(status_code=403, detail="Download fora do diretorio permitido.")
 
     media_type = {
         ".pdf": "application/pdf",
@@ -167,7 +187,31 @@ def download_generated_file(path: str = Query(..., min_length=1)) -> FileRespons
         ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }.get(resolved_path.suffix.lower(), "application/octet-stream")
 
-    return FileResponse(path=resolved_path, filename=resolved_path.name, media_type=media_type)
+    return FileResponse(
+        path=resolved_path,
+        filename=resolved_path.name,
+        media_type=media_type,
+        background=BackgroundTask(_mark_download_delivered, resolved_path),
+    )
+
+
+@app.on_event("startup")
+async def startup_artifact_cleanup() -> None:
+    if not settings.artifact_cleanup_enabled:
+        return
+
+    await asyncio.to_thread(cleanup_managed_artifacts)
+    app.state.artifact_cleanup_task = asyncio.create_task(_artifact_cleanup_loop())
+
+
+@app.on_event("shutdown")
+async def shutdown_artifact_cleanup() -> None:
+    cleanup_task = getattr(app.state, "artifact_cleanup_task", None)
+    if cleanup_task is None:
+        return
+    cleanup_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await cleanup_task
 
 
 def _normalize_text(value: str) -> str:
@@ -213,7 +257,7 @@ async def _save_upload_file(file: UploadFile, destination: Path) -> int:
 
 
 def _cache_report_template(source_path: Path) -> None:
-    template_dir = Path("artifacts") / "templates"
+    template_dir = templates_root()
     template_dir.mkdir(parents=True, exist_ok=True)
     cached_template = template_dir / "Relatorio de Analise de Perfil.xlsx"
     shutil.copy2(source_path, cached_template)
@@ -249,3 +293,22 @@ def _classify_uploaded_file(filename: str) -> str | None:
     if "iebt innovation.xlsx" in normalized or "ancoras" in normalized or "diagnostico" in normalized:
         return "anchors_workbook"
     return None
+
+
+def _mark_download_delivered(path: Path) -> None:
+    try:
+        mark_upload_delivered(path)
+    except Exception:
+        LOGGER.exception("Failed to mark delivered artifact for cleanup tracking: %s", path)
+
+
+async def _artifact_cleanup_loop() -> None:
+    interval_seconds = max(60, settings.artifact_cleanup_interval_minutes * 60)
+    while True:
+        try:
+            await asyncio.sleep(interval_seconds)
+            await asyncio.to_thread(cleanup_managed_artifacts)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            LOGGER.exception("Artifact cleanup loop failed")

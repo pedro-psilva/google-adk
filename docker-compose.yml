@@ -1,17 +1,22 @@
 services:
   backend:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
+      context: ./backend
+      dockerfile: Dockerfile
     environment:
       APP_ENV: ${APP_ENV:-production}
       GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:-}
       GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-}
       VERTEX_MODEL: ${VERTEX_MODEL:-gemini-2.5-flash}
+      ARTIFACTS_ROOT: /data/artifacts
+      ARTIFACT_CLEANUP_ENABLED: ${ARTIFACT_CLEANUP_ENABLED:-true}
+      ARTIFACT_CLEANUP_INTERVAL_MINUTES: ${ARTIFACT_CLEANUP_INTERVAL_MINUTES:-10}
+      DELIVERED_ARTIFACT_RETENTION_MINUTES: ${DELIVERED_ARTIFACT_RETENTION_MINUTES:-30}
+      STALE_ARTIFACT_RETENTION_HOURS: ${STALE_ARTIFACT_RETENTION_HOURS:-6}
     ports:
       - "8000:8000"
     volumes:
-      - ./artifacts:/app/artifacts
+      - ./artifacts:/data/artifacts
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
       interval: 15s

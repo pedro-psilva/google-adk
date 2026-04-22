@@ -15,7 +15,7 @@ from profile_backend.interfaces.adk.agent import adk_pipeline_runner
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the production-oriented ADK pipeline.")
     parser.add_argument("bundle_input", help="Path to a normalized bundle JSON or an intake folder")
-    parser.add_argument("--output-dir", default="artifacts/production-run", help="Where to write generated artifacts")
+    parser.add_argument("--output-dir", default="production-run", help="Where to write generated artifacts")
     parser.add_argument(
         "--draft-mode",
         choices=["preview", "live"],

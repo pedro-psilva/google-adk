@@ -18,6 +18,7 @@ from google.genai import types
 
 from profile_backend.application.services.report_pipeline import ReportPipelineService
 from profile_backend.domain.models import PipelineRequest
+from profile_backend.infrastructure.storage_paths import adk_artifacts_root, resolve_bundle_input, resolve_output_dir
 
 ADK_APP_NAME = "profile-report-pipeline"
 LOAD_BUNDLE_APP_NAME = "profile-report-load-bundle"
@@ -41,7 +42,7 @@ COVERAGE_RESPONSE_KEY = "app:coverage_response"
 DRAFT_PREVIEW_REQUEST_KEY = "app:draft_preview_request"
 DRAFT_PREVIEW_RESPONSE_KEY = "app:draft_preview_response"
 
-ADK_ARTIFACTS_ROOT = Path("artifacts") / "adk-sessions"
+ADK_ARTIFACTS_ROOT = adk_artifacts_root()
 PIPELINE_ARTIFACT_SERVICE = FileArtifactService(ADK_ARTIFACTS_ROOT)
 
 
@@ -171,15 +172,19 @@ def _bundle_path_from_context(ctx: InvocationContext, request_key: str, missing_
 
 def _validate_request_step(ctx: InvocationContext) -> StepExecution:
     request = _request_from_context(ctx)
-    bundle_input = Path(request.bundle_input).expanduser()
+    bundle_input = resolve_bundle_input(request.bundle_input)
     if not bundle_input.exists():
         raise FileNotFoundError(f"Bundle input not found: {bundle_input}")
 
-    output_dir = Path(request.output_dir).expanduser()
+    output_dir = resolve_output_dir(request.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     state_delta = {
-        PIPELINE_REQUEST_KEY: _request_to_dict(request),
+        PIPELINE_REQUEST_KEY: {
+            **_request_to_dict(request),
+            "bundle_input": str(bundle_input),
+            "output_dir": str(output_dir),
+        },
         PIPELINE_STATUS_KEY: "validated",
     }
     message = f"Pedido validado para {bundle_input.name}."
