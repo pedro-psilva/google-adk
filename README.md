@@ -13,7 +13,7 @@ O pipeline atual:
 - executa o pipeline principal via ADK;
 - gera o relatorio final em `.docx`;
 - gera o relatorio final em `.pdf`;
-- salva artefatos intermediarios em `artifacts/`.
+- salva artefatos intermediarios no `ARTIFACTS_ROOT`.
 
 O `.docx` e o `.pdf` sao montados diretamente em Python a partir do bundle normalizado. Nao existe dependencia de Excel para gerar a entrega final desta branch.
 
@@ -34,6 +34,7 @@ Guia de deploy em producao:
 - Docker Desktop ou Docker Engine
 - nenhuma VM Windows
 - nenhum worker auxiliar para PDF
+- imagem de backend buildada apenas a partir de `backend/`
 
 ## Como iniciar localmente
 
@@ -88,6 +89,8 @@ Servicos esperados:
 - frontend: `http://127.0.0.1:4173`
 
 Nesta branch, os containers `frontend` e `backend` sao suficientes. Nao existe dependencia de worker Windows nem de `PDF_EXPORT_WORKER_URL`.
+O backend grava uploads e saidas apenas no volume configurado em `ARTIFACTS_ROOT` e nao precisa escrever dentro de `/app`.
+O backend agora builda com contexto proprio em `./backend`, como o frontend.
 
 ## Fluxo principal
 
@@ -107,7 +110,7 @@ Nesta branch, os containers `frontend` e `backend` sao suficientes. Nao existe d
 
 - relatorio final em `.docx`
 - relatorio final em `.pdf`
-- artefatos intermediarios em `artifacts/`
+- artefatos intermediarios no volume apontado por `ARTIFACTS_ROOT`
 
 ## Comportamentos importantes
 
@@ -136,8 +139,15 @@ As mais relevantes para o fluxo atual sao:
 - `GOOGLE_CLOUD_PROJECT`
 - `GOOGLE_CLOUD_LOCATION`
 - `VERTEX_MODEL`
+- `ARTIFACTS_ROOT`
+- `ARTIFACT_CLEANUP_ENABLED`
+- `ARTIFACT_CLEANUP_INTERVAL_MINUTES`
+- `DELIVERED_ARTIFACT_RETENTION_MINUTES`
+- `STALE_ARTIFACT_RETENTION_HOURS`
 
 Se voce nao for usar `draft_mode=live`, as variaveis do Vertex podem ficar vazias no ambiente local.
+No compose atual, `ARTIFACTS_ROOT` fica em `/data/artifacts` e deve estar montado em volume persistente.
+Os uploads e relatorios finais passam a ser removidos automaticamente algum tempo depois do download, e sobras antigas tambem sao varridas periodicamente.
 
 ## Testes
 

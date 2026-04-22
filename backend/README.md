@@ -6,6 +6,7 @@ Production-oriented backend for the profile-report automation workflow.
 
 - HTTP API: `profile_backend.interfaces.http.api:app`
 - ADK agent: `profile_backend.interfaces.adk.agent:root_agent`
+- Docker image: build context `backend/`
 
 ## Main Flow
 
@@ -35,6 +36,8 @@ The analysis routes now execute through deterministic ADK workflows:
 
 - Keep Vertex SDK usage in infrastructure adapters only.
 - Keep domain and application logic framework-agnostic.
-- Treat the current root-level `profile_report_automation` package as a transitional implementation detail while behavior is migrated inward.
 - The current delivery target for this branch is the generated local `.docx` plus `.pdf` artifacts, without Excel as a runtime dependency.
 - The current ADK root agent is a deterministic workflow orchestrator rather than a chat-first agent.
+- The runtime writes uploads, normalized bundles, ADK session artifacts, and final files only under `ARTIFACTS_ROOT`.
+- The backend Docker image is self-contained inside the `backend/` directory, including the report-generation runtime package.
+- Upload roots under `ARTIFACTS_ROOT/uploads` are now lifecycle-tracked and cleaned automatically after delivery or after a stale TTL.
