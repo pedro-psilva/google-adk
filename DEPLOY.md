@@ -65,6 +65,9 @@ O backend usa principalmente:
 - `GOOGLE_CLOUD_PROJECT`
 - `GOOGLE_CLOUD_LOCATION`
 - `VERTEX_MODEL`
+- `CORS_ALLOWED_ORIGINS`
+- `CORS_ALLOWED_ORIGIN_REGEX`
+- `CORS_ALLOW_CREDENTIALS`
 - `ARTIFACTS_ROOT`
 - `ARTIFACT_CLEANUP_ENABLED`
 - `ARTIFACT_CLEANUP_INTERVAL_MINUTES`
@@ -78,6 +81,9 @@ APP_ENV=production
 GOOGLE_CLOUD_PROJECT=
 GOOGLE_CLOUD_LOCATION=
 VERTEX_MODEL=gemini-2.5-flash
+CORS_ALLOWED_ORIGINS=http://127.0.0.1:4173,http://localhost:4173
+CORS_ALLOWED_ORIGIN_REGEX=
+CORS_ALLOW_CREDENTIALS=false
 ARTIFACTS_ROOT=/data/artifacts
 ARTIFACT_CLEANUP_ENABLED=true
 ARTIFACT_CLEANUP_INTERVAL_MINUTES=10
@@ -109,6 +115,9 @@ APP_ENV=production
 GOOGLE_CLOUD_PROJECT=
 GOOGLE_CLOUD_LOCATION=
 VERTEX_MODEL=gemini-2.5-flash
+CORS_ALLOWED_ORIGINS=https://seu-frontend.exemplo.com
+CORS_ALLOWED_ORIGIN_REGEX=
+CORS_ALLOW_CREDENTIALS=false
 ARTIFACTS_ROOT=/data/artifacts
 ARTIFACT_CLEANUP_ENABLED=true
 ARTIFACT_CLEANUP_INTERVAL_MINUTES=10
@@ -191,6 +200,7 @@ Verifique:
 - healthcheck do backend
 - porta `8000`
 - regras de proxy/CORS da sua publicacao
+- se o backend exposto permite a origem publica do frontend em `CORS_ALLOWED_ORIGINS`
 
 ### O pipeline roda, mas nao gera arquivos finais
 

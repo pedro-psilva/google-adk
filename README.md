@@ -139,6 +139,9 @@ As mais relevantes para o fluxo atual sao:
 - `GOOGLE_CLOUD_PROJECT`
 - `GOOGLE_CLOUD_LOCATION`
 - `VERTEX_MODEL`
+- `CORS_ALLOWED_ORIGINS`
+- `CORS_ALLOWED_ORIGIN_REGEX`
+- `CORS_ALLOW_CREDENTIALS`
 - `ARTIFACTS_ROOT`
 - `ARTIFACT_CLEANUP_ENABLED`
 - `ARTIFACT_CLEANUP_INTERVAL_MINUTES`
@@ -146,6 +149,7 @@ As mais relevantes para o fluxo atual sao:
 - `STALE_ARTIFACT_RETENTION_HOURS`
 
 Se voce nao for usar `draft_mode=live`, as variaveis do Vertex podem ficar vazias no ambiente local.
+Se frontend e backend estiverem publicados em dominios diferentes, configure `CORS_ALLOWED_ORIGINS` no backend com a URL publica do frontend.
 No compose atual, `ARTIFACTS_ROOT` fica em `/data/artifacts` e deve estar montado em volume persistente.
 Os uploads e relatorios finais passam a ser removidos automaticamente algum tempo depois do download, e sobras antigas tambem sao varridas periodicamente.
 

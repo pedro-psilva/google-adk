@@ -14,6 +14,7 @@ from uuid import uuid4
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
@@ -36,6 +37,16 @@ from profile_backend.infrastructure.storage_paths import (
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
 LOGGER = logging.getLogger(__name__)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=list(settings.cors_allowed_origins),
+    allow_origin_regex=settings.cors_allowed_origin_regex,
+    allow_credentials=settings.cors_allow_credentials,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
+)
 
 
 class BundlePathRequest(BaseModel):

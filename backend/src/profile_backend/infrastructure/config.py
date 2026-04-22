@@ -5,6 +5,22 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+def _env_csv(name: str, default: tuple[str, ...] = ()) -> tuple[str, ...]:
+    raw_value = os.getenv(name, "").strip()
+    if not raw_value:
+        return default
+
+    items: list[str] = []
+    seen: set[str] = set()
+    for candidate in raw_value.replace("\n", ",").split(","):
+        normalized = candidate.strip().rstrip("/")
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        items.append(normalized)
+    return tuple(items)
+
+
 def _env_flag(name: str, default: bool) -> bool:
     raw_value = os.getenv(name, "").strip().lower()
     if not raw_value:
@@ -21,6 +37,11 @@ def _env_positive_int(name: str, default: int) -> int:
     except ValueError:
         return default
     return parsed_value if parsed_value > 0 else default
+
+
+def _env_optional_str(name: str) -> str | None:
+    raw_value = os.getenv(name, "").strip()
+    return raw_value or None
 
 
 def _backend_root() -> Path:
@@ -74,6 +95,12 @@ class Settings:
     google_cloud_project: str | None = os.getenv("GOOGLE_CLOUD_PROJECT")
     google_cloud_location: str | None = os.getenv("GOOGLE_CLOUD_LOCATION")
     vertex_model: str = os.getenv("VERTEX_MODEL", "gemini-2.5-flash")
+    cors_allowed_origins: tuple[str, ...] = _env_csv(
+        "CORS_ALLOWED_ORIGINS",
+        default=("http://127.0.0.1:4173", "http://localhost:4173"),
+    )
+    cors_allowed_origin_regex: str | None = _env_optional_str("CORS_ALLOWED_ORIGIN_REGEX")
+    cors_allow_credentials: bool = _env_flag("CORS_ALLOW_CREDENTIALS", False)
     backend_root: Path = _backend_root()
     repo_root: Path = _repo_root()
     artifacts_root: Path = _resolve_artifacts_root()
