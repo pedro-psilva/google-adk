@@ -8,6 +8,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# System fonts required by the chart-rendering pipeline (Pillow/PIL)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        fonts-dejavu-core \
+        libfreetype6 && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt ./
 
 RUN pip install --no-cache-dir -r requirements.txt
