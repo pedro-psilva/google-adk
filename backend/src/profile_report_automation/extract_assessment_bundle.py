@@ -539,6 +539,30 @@ def extract_profiler_scores(ws: Any) -> list[dict[str, Any]]:
     return items
 
 
+def compute_dominant_style_label(scores: list[dict[str, Any]], threshold_pct: float = 6.0) -> str | None:
+    """Return the dominant style label, combining multiple styles when scores are close.
+
+    When the second-highest style is within *threshold_pct* percentage points of the
+    highest, both names are joined (e.g. "Comunicador Planejador").  This matches the
+    convention used in the Profiler extended PDF reports and the manually-filled Excel
+    workbook.
+    """
+    if not scores:
+        return None
+    style_order = ["Executor", "Comunicador", "Planejador", "Analista"]
+    sorted_scores = sorted(scores, key=lambda x: x["percentage"], reverse=True)
+    top_pct = sorted_scores[0]["percentage"]
+    dominant_names: list[str] = [sorted_scores[0]["style"]]
+    for item in sorted_scores[1:]:
+        if (top_pct - item["percentage"]) <= threshold_pct:
+            dominant_names.append(item["style"])
+        else:
+            break
+    # Preserve canonical Profiler order (Executor > Comunicador > Planejador > Analista)
+    dominant_names.sort(key=lambda s: style_order.index(s) if s in style_order else 99)
+    return " ".join(dominant_names)
+
+
 def canonical_anchor_name(name: str) -> str:
     simplified = clean_text(name).replace("\n", " ")
     simplified = re.sub(r"\s+", " ", simplified).strip()
@@ -613,7 +637,7 @@ def extract_report_workbook(path: Path) -> dict[str, Any]:
     }
 
     profiler_scores = extract_profiler_scores(profiler_ws)
-    dominant_profiler = max(profiler_scores, key=lambda item: item["percentage"]) if profiler_scores else None
+    dominant_profiler_label = compute_dominant_style_label(profiler_scores)
 
     culture_scores: list[dict[str, Any]] = []
     for row in range(3, 7):
@@ -637,7 +661,7 @@ def extract_report_workbook(path: Path) -> dict[str, Any]:
             "demand": extract_prefixed_value(summary_ws, "Demanda:"),
         },
         "profiler_scores": profiler_scores,
-        "dominant_profiler_style": dominant_profiler["style"] if dominant_profiler else None,
+        "dominant_profiler_style": dominant_profiler_label,
         "cultural_scores_from_template": culture_scores,
         "sections": sections,
         "notes": extract_report_anchor_notes(anchor_input_ws),
@@ -750,11 +774,17 @@ def extract_profiler_extended(path: Path) -> dict[str, Any]:
     page_seven = pages[6] if len(pages) > 6 else ""
     page_eight = pages[7] if len(pages) > 7 else ""
 
-    dominant_match = re.search(r"Neste momento, .* está:\s*([A-Za-zÀ-ÿ]+)\s+em", page_two)
-    dominant_style = dominant_match.group(1) if dominant_match else None
+    # The PDF text reads e.g. "Neste momento, está: Comunicador Planejador em …"
+    # Capture one or more capitalized words so multi-style labels are preserved.
+    dominant_match = re.search(
+        r"Neste momento,.*?está:\s*((?:[A-Za-zÀ-ÿ]+\s*)+?)\s+em\b",
+        page_two,
+        flags=re.DOTALL,
+    )
+    dominant_style = dominant_match.group(1).strip() if dominant_match else None
     profiler_scores = extract_profiler_scores_from_extended(page_two)
     if not dominant_style and profiler_scores:
-        dominant_style = max(profiler_scores, key=lambda item: item["percentage"])["style"]
+        dominant_style = compute_dominant_style_label(profiler_scores)
 
     long_form_sections = {
         "page_2_overview": page_two,
@@ -868,6 +898,10 @@ def build_generated_profiler_paragraph(dominant_style: str) -> str:
         "Planejador": "Costuma atuar com prudencia, consistencia e preferencia por previsibilidade na execucao.",
         "Analista": "Tende a priorizar profundidade, criterio e qualidade tecnica nas entregas.",
     }
+    # Support multi-style labels such as "Comunicador Planejador"
+    individual_styles = [s.strip() for s in dominant_style.split() if s.strip() in summaries]
+    if individual_styles:
+        return " ".join(summaries[s] for s in individual_styles)
     return summaries.get(
         dominant_style,
         "O estilo predominante contribui para a leitura do comportamento no contexto profissional.",
@@ -881,19 +915,26 @@ def build_generated_conclusion_lines(
     top_cultures: list[dict[str, Any]],
     extreme_domains: list[dict[str, Any]],
 ) -> list[str]:
-    lines: list[str] = []
+    # Items are numbered ("1- …") so that build_template_fallback's bullet-detection
+    # (which filters lines starting with "1"–"9") can find them even when the
+    # report workbook is not provided.
+    raw_lines: list[str] = []
     if dominant_style:
-        lines.append(f"Predominio do estilo {dominant_style} no contexto avaliado.")
+        raw_lines.append(f"Predominio do estilo {dominant_style} no contexto avaliado.")
     if top_anchors:
-        lines.append("Ancoras mais presentes: " + ", ".join(item["name"] for item in top_anchors if item.get("name")) + ".")
+        raw_lines.append(
+            "Ancoras mais presentes: "
+            + ", ".join(item["name"] for item in top_anchors if item.get("name"))
+            + "."
+        )
     if top_cultures:
-        lines.append(
+        raw_lines.append(
             "Maior aderencia cultural a "
             + ", ".join(item["culture"] for item in top_cultures if item.get("culture"))
             + "."
         )
     if extreme_domains:
-        lines.append(
+        raw_lines.append(
             "No NEO PI-R, destacam-se "
             + ", ".join(
                 _format_domain_category_label(str(item["domain"]), str(item["category"]))
@@ -902,7 +943,7 @@ def build_generated_conclusion_lines(
             )
             + "."
         )
-    return lines[:5]
+    return [f"{i + 1}- {line}" for i, line in enumerate(raw_lines[:5])]
 
 
 def _format_domain_category_label(domain: str, category: str) -> str:
