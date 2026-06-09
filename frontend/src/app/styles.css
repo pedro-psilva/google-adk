@@ -16,14 +16,14 @@
   --accent-soft: rgba(255, 107, 53, 0.16);
   --success: #34d399;
   --warning: #f59e0b;
-  --shadow: 0 24px 72px rgba(0, 0, 0, 0.34);
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
   --code-bg: #11131a;
   --code-text: #f2f4f8;
   --glow-primary: rgba(255, 107, 53, 0.2);
   --glow-secondary: rgba(239, 68, 68, 0.16);
-  --radius-xl: 30px;
-  --radius-lg: 22px;
-  --radius-md: 16px;
+  --radius-xl: 22px;
+  --radius-lg: 18px;
+  --radius-md: 14px;
   --radius-sm: 12px;
 }
 
@@ -43,7 +43,7 @@
   --accent-soft: rgba(255, 107, 53, 0.12);
   --success: #1d7a67;
   --warning: #a15d30;
-  --shadow: 0 24px 80px rgba(15, 23, 42, 0.12);
+  --shadow: 0 16px 44px rgba(15, 23, 42, 0.10);
   --code-bg: #17202a;
   --code-text: #e6f0f5;
   --glow-primary: rgba(255, 107, 53, 0.18);
@@ -100,9 +100,9 @@ button {
   width: 360px;
   height: 360px;
   border-radius: 999px;
-  filter: blur(84px);
+  filter: blur(90px);
   pointer-events: none;
-  opacity: 0.8;
+  opacity: 0.4;
 }
 
 .app-shell__orb--one {
@@ -276,8 +276,8 @@ button {
 }
 
 .workflow-hero__title {
-  font-size: clamp(2.5rem, 4vw, 4.4rem);
-  max-width: 12ch;
+  font-size: clamp(1.9rem, 2.8vw, 2.8rem);
+  max-width: 16ch;
 }
 
 .hero-panel__description,
@@ -383,7 +383,7 @@ button {
 
 .workflow-hero--compact .workflow-hero__title {
   max-width: none;
-  font-size: clamp(2.2rem, 3.8vw, 3.8rem);
+  font-size: clamp(1.9rem, 2.8vw, 2.8rem);
 }
 
 .workflow-hero__content {
@@ -729,7 +729,7 @@ button {
 .panel-heading__title {
   margin: 0;
   font-family: "Fraunces", Georgia, serif;
-  font-size: 1.65rem;
+  font-size: 1.4rem;
 }
 
 .panel-heading__description {
@@ -854,7 +854,7 @@ button {
 
 .metric-card {
   padding: 18px;
-  min-height: 146px;
+  min-height: 0;
 }
 
 .metric-card__top {
@@ -870,7 +870,8 @@ button {
 }
 
 .metric-card__detail {
-  margin: 18px 0 0;
+  margin: 10px 0 0;
+  font-size: 0.9rem;
 }
 
 .badge {
