@@ -1,0 +1,8 @@
+# Normalize line endings: store text files with LF in the repository and
+# check them out as LF on every platform. Prevents the CRLF/LF churn that
+# left coverage.py, extract_assessment_bundle.py and vertex_drafting.py
+# diffing against themselves.
+* text=auto eol=lf
+
+# Binary assets — never normalize.
+*.png binary

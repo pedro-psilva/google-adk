@@ -318,50 +318,35 @@ export function WorkflowPage() {
   const attentionItems = buildNeopiAttentionItems(bundle);
   const selectedCount = intakeSlots.filter((slot) => selectedFiles[slot.id]).length;
   const canRunAutomation = selectedCount === intakeSlots.length;
-  const uploadedSelectionMatches =
-    uploadedSource?.files.length === intakeSlots.length &&
-    intakeSlots.every((slot) => {
-      const selectedFile = selectedFiles[slot.id];
-      const uploadedFile = findUploadedSlotFile(uploadedSource?.files ?? [], slot.category);
-      return isCurrentSelectionUploaded(selectedFile, uploadedFile);
-    });
 
   return (
     <div className="page-stack">
       <section className="surface surface--hero workflow-hero workflow-hero--compact">
         <div className="workflow-hero__content">
           <p className="workflow-hero__eyebrow">Análise de perfil</p>
-          <h1 className="workflow-hero__title">Selecione os 3 arquivos e gere o relatório final.</h1>
+          <h1 className="workflow-hero__title">Gere o relatório final a partir dos 3 arquivos.</h1>
           <p className="workflow-hero__description">
-            Escolha um arquivo em cada card e a geração cuida do envio, da análise e da montagem final em sequência.
+            Selecione um documento em cada card e a geração cuida do resto.
           </p>
-
-          <div className="workflow-hero__badges">
-            <Badge tone="neutral">Fluxo por arquivos</Badge>
-            <Badge tone={uploadedSelectionMatches ? "success" : canRunAutomation ? "neutral" : "warning"}>
-              {uploadedSelectionMatches ? "Base atualizada" : canRunAutomation ? "Pronto para gerar" : `${selectedCount}/3 selecionados`}
-            </Badge>
-            <Badge tone={localDocxPath ? "success" : "neutral"}>{localDocxPath ? "Word pronto" : "Aguardando geração"}</Badge>
-          </div>
         </div>
 
         <div className="workflow-shortcuts">
           <MetricCard
             label="Arquivos"
-            value={String(selectedCount)}
-            detail="Cada card recebe um documento específico da avaliação."
+            value={`${selectedCount}/3`}
+            detail="Documentos selecionados."
             tone={canRunAutomation ? "success" : "warning"}
           />
           <MetricCard
             label="Pendências"
-            value={coverage ? String(coverage.summary.required_overall.missing) : "--"}
-            detail="Itens obrigatórios ainda ausentes no texto."
+            value={coverage ? String(coverage.summary.required_overall.missing) : "—"}
+            detail="Itens obrigatórios ausentes."
             tone={coverage?.summary.required_overall.missing === 0 ? "success" : "warning"}
           />
           <MetricCard
-            label="Última ação"
-            value={lastAction}
-            detail={localDocxPath ? "O Word final já pode ser baixado." : "Depois da análise, o Word final aparece aqui."}
+            label="Relatório"
+            value={localDocxPath ? "Pronto" : "—"}
+            detail="Word final para download."
             tone={localDocxPath ? "success" : "neutral"}
           />
         </div>
@@ -369,10 +354,7 @@ export function WorkflowPage() {
 
       <section className="surface surface--panel workflow-panel">
         <div className="panel-heading panel-heading--compact">
-          <div>
-            <p className="panel-heading__eyebrow">Entrada</p>
-            <h2 className="panel-heading__title">Arquivos da avaliação</h2>
-          </div>
+          <h2 className="panel-heading__title">Arquivos da avaliação</h2>
         </div>
 
         <div className="workflow-intake-grid workflow-intake-grid--slots">
@@ -438,20 +420,6 @@ export function WorkflowPage() {
           <p className="empty-state">Selecione os 3 arquivos obrigatórios para habilitar a geração.</p>
         ) : null}
 
-        {uploadedSource ? (
-          <div className="workflow-file-group">
-            <p className="workflow-file-group__label">Última base enviada na geração</p>
-            <div className="workflow-file-list">
-              {uploadedSource.files.map((file) => (
-                <span key={`${file.name}-${file.size_bytes}`} className="workflow-file-chip workflow-file-chip--uploaded">
-                  <strong>{file.label || file.name}</strong>
-                  <span>{file.name}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
         {error ? <p className="result-panel__error">{error}</p> : null}
       </section>
 
@@ -459,7 +427,6 @@ export function WorkflowPage() {
         <section className="surface surface--panel workflow-panel">
           <div className="panel-heading panel-heading--compact">
             <div>
-              <p className="panel-heading__eyebrow">Revisão</p>
               <h2 className="panel-heading__title">Sinais para ajustar</h2>
             </div>
             <Badge tone={coverage?.summary.status === "pass" ? "success" : "warning"}>
@@ -542,7 +509,6 @@ export function WorkflowPage() {
         <section className="surface surface--panel workflow-panel">
           <div className="panel-heading panel-heading--compact">
             <div>
-              <p className="panel-heading__eyebrow">Texto sugerido</p>
               <h2 className="panel-heading__title">Rascunho</h2>
             </div>
             <Badge tone={draft ? "success" : "neutral"}>{draft ? "pronto" : "aguardando"}</Badge>
@@ -574,55 +540,38 @@ export function WorkflowPage() {
 
       <section className="surface surface--panel workflow-panel">
         <div className="panel-heading panel-heading--compact">
-          <div>
-            <p className="panel-heading__eyebrow">Saída</p>
-            <h2 className="panel-heading__title">Arquivos finais</h2>
-          </div>
+          <h2 className="panel-heading__title">Arquivos finais</h2>
           <Badge tone={hasFinalReports ? "success" : "neutral"}>
             {hasFinalReports ? "pronto" : "aguardando"}
           </Badge>
         </div>
 
-        <div className="workflow-delivery-grid">
-          <article className="workflow-review-card">
-            <h3>Downloads</h3>
-            {hasFinalReports ? (
-              <div className="workflow-link-row">
-                {localDocxPath ? (
-                  <a
-                    className="workflow-link-chip"
-                    href={buildDownloadUrl(apiBaseUrl, localDocxPath)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Baixar Word
-                  </a>
-                ) : null}
-                {localPdfPath ? (
-                  <a
-                    className="workflow-link-chip"
-                    href={buildDownloadUrl(apiBaseUrl, localPdfPath)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Baixar PDF
-                  </a>
-                ) : null}
-              </div>
-            ) : (
-              <p className="empty-state">Depois da análise, os arquivos finais em Word e PDF aparecem aqui para download.</p>
-            )}
-          </article>
-
-          <article className="workflow-review-card">
-            <h3>Resultado esperado</h3>
+        {hasFinalReports ? (
+          <div className="workflow-link-row">
             {localDocxPath ? (
-              <p className="empty-state">O Word final é o artefato principal desta branch, preservando logo, gráficos e a estrutura visual do relatório. O PDF segue disponível como versão complementar.</p>
-            ) : (
-              <p className="empty-state">Nesta branch, a entrega final não depende de Excel. O foco é gerar um Word fiel ao relatório, com logo, gráficos e PDF complementar.</p>
-            )}
-          </article>
-        </div>
+              <a
+                className="workflow-link-chip"
+                href={buildDownloadUrl(apiBaseUrl, localDocxPath)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Baixar Word
+              </a>
+            ) : null}
+            {localPdfPath ? (
+              <a
+                className="workflow-link-chip"
+                href={buildDownloadUrl(apiBaseUrl, localPdfPath)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Baixar PDF
+              </a>
+            ) : null}
+          </div>
+        ) : (
+          <p className="empty-state">Os arquivos finais em Word e PDF aparecem aqui após a geração.</p>
+        )}
       </section>
     </div>
   );
