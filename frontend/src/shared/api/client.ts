@@ -29,7 +29,31 @@ export function buildDownloadUrl(baseUrl: string, filePath: string) {
   return joinUrl(baseUrl, `/api/v1/files/download?${params.toString()}`);
 }
 
-async function request<T>(path: string, init?: RequestInit, baseUrl = ""): Promise<T> {
+const RETRYABLE_STATUSES = new Set([502, 503, 504]);
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function request<T>(path: string, init?: RequestInit, baseUrl = "", attempts = 1): Promise<T> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await requestOnce<T>(path, init, baseUrl);
+    } catch (error) {
+      const retryable =
+        error instanceof ApiError && (error.status === 0 || RETRYABLE_STATUSES.has(error.status));
+      if (!retryable || attempt === attempts) {
+        throw error;
+      }
+      lastError = error;
+      await sleep(1000 * attempt);
+    }
+  }
+  throw lastError;
+}
+
+async function requestOnce<T>(path: string, init?: RequestInit, baseUrl = ""): Promise<T> {
   const headers = new Headers(init?.headers ?? {});
   if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -102,6 +126,7 @@ export function loadJsonArtifact<T>(baseUrl: string, bundlePath: string) {
       body: JSON.stringify({ bundle_path: bundlePath }),
     },
     baseUrl,
+    3,
   );
 }
 
