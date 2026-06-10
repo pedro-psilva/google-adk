@@ -159,6 +159,7 @@ def infer_person_name_from_path(path: Path | None) -> str:
         r"\s*-\s*extended.*$",
         r"\s*-\s*relatorio de analise de perfil.*$",
         r"\s*-\s*\d{5,}.*$",
+        r"\s*-?\s*\bprofiler\b.*$",
     ]
     candidate = stem
     for pattern in cleanup_patterns:
