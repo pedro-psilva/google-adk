@@ -540,6 +540,28 @@ def extract_profiler_scores(ws: Any) -> list[dict[str, Any]]:
     return items
 
 
+def compute_dominant_style_label(scores: list[dict[str, Any]], threshold_pct: float = 6.0) -> str | None:
+    """Return the dominant style label, combining multiple styles when scores are close.
+
+    When the second-highest style is within *threshold_pct* percentage points of the
+    top score, it is included in the label. Styles are always ordered canonically
+    (Executor → Comunicador → Planejador → Analista) regardless of score rank.
+    """
+    if not scores:
+        return None
+    style_order = ["Executor", "Comunicador", "Planejador", "Analista"]
+    sorted_scores = sorted(scores, key=lambda x: x["percentage"], reverse=True)
+    top_pct = sorted_scores[0]["percentage"]
+    dominant_names: list[str] = [sorted_scores[0]["style"]]
+    for item in sorted_scores[1:]:
+        if (top_pct - item["percentage"]) <= threshold_pct:
+            dominant_names.append(item["style"])
+        else:
+            break
+    dominant_names.sort(key=lambda s: style_order.index(s) if s in style_order else 99)
+    return " ".join(dominant_names)
+
+
 def canonical_anchor_name(name: str) -> str:
     simplified = clean_text(name).replace("\n", " ")
     simplified = re.sub(r"\s+", " ", simplified).strip()
@@ -614,7 +636,7 @@ def extract_report_workbook(path: Path) -> dict[str, Any]:
     }
 
     profiler_scores = extract_profiler_scores(profiler_ws)
-    dominant_profiler = max(profiler_scores, key=lambda item: item["percentage"]) if profiler_scores else None
+    dominant_profiler_label = compute_dominant_style_label(profiler_scores)
 
     culture_scores: list[dict[str, Any]] = []
     for row in range(3, 7):
@@ -638,7 +660,7 @@ def extract_report_workbook(path: Path) -> dict[str, Any]:
             "demand": extract_prefixed_value(summary_ws, "Demanda:"),
         },
         "profiler_scores": profiler_scores,
-        "dominant_profiler_style": dominant_profiler["style"] if dominant_profiler else None,
+        "dominant_profiler_style": dominant_profiler_label,
         "cultural_scores_from_template": culture_scores,
         "sections": sections,
         "notes": extract_report_anchor_notes(anchor_input_ws),
@@ -751,11 +773,14 @@ def extract_profiler_extended(path: Path) -> dict[str, Any]:
     page_seven = pages[6] if len(pages) > 6 else ""
     page_eight = pages[7] if len(pages) > 7 else ""
 
-    dominant_match = re.search(r"Neste momento, .* está:\s*([A-Za-zÀ-ÿ]+)\s+em", page_two)
-    dominant_style = dominant_match.group(1) if dominant_match else None
+    dominant_match = re.search(
+        r"Neste momento,.*?está:\s*((?:[A-Za-zÀ-ÿ]+\s*)+?)\s+em\b",
+        page_two, flags=re.DOTALL,
+    )
+    dominant_style = dominant_match.group(1).strip() if dominant_match else None
     profiler_scores = extract_profiler_scores_from_extended(page_two)
     if not dominant_style and profiler_scores:
-        dominant_style = max(profiler_scores, key=lambda item: item["percentage"])["style"]
+        dominant_style = compute_dominant_style_label(profiler_scores)
 
     long_form_sections = {
         "page_2_overview": page_two,
@@ -869,6 +894,11 @@ def build_generated_profiler_paragraph(dominant_style: str) -> str:
         "Planejador": "Costuma atuar com prudencia, consistencia e preferencia por previsibilidade na execucao.",
         "Analista": "Tende a priorizar profundidade, criterio e qualidade tecnica nas entregas.",
     }
+    # For multi-style labels (e.g. "Comunicador Planejador"), combine each style's
+    # individual description so all named styles are represented in the paragraph.
+    individual_styles = [s.strip() for s in dominant_style.split() if s.strip() in summaries]
+    if individual_styles:
+        return " ".join(summaries[s] for s in individual_styles)
     return summaries.get(
         dominant_style,
         "O estilo predominante contribui para a leitura do comportamento no contexto profissional.",
@@ -903,7 +933,10 @@ def build_generated_conclusion_lines(
             )
             + "."
         )
-    return lines[:5]
+    raw_lines = lines[:5]
+    # Prefix each line with a number so build_template_fallback can detect them
+    # as conclusion items (it checks for patterns like "1-", "2-" etc.).
+    return [f"{i + 1}- {line}" for i, line in enumerate(raw_lines)]
 
 
 def _format_domain_category_label(domain: str, category: str) -> str:
@@ -970,47 +1003,4 @@ def build_bundle(base_dir: Path) -> dict[str, Any]:
 
     return {
         "input_dir": str(base_dir.resolve()),
-        "files": {key: str(value.resolve()) for key, value in files.items() if value is not None},
-        "person": person,
-        "neopi": neopi_bundle,
-        "profiler": {
-            "scores": (report_workbook or {}).get("profiler_scores") or profiler_bundle.get("scores", []),
-            "dominant_style": (report_workbook or {}).get("dominant_profiler_style")
-            or profiler_bundle.get("dominant_style_from_pdf"),
-            "extended_pdf": profiler_bundle,
-        },
-        "career_anchors": anchor_bundle["career_anchors"],
-        "cultural_diagnosis": anchor_bundle["cultural_diagnosis"],
-        "report_template": {
-            "sections": (report_workbook or {}).get("sections") or generated_sections,
-        },
-        "notes": notes,
-    }
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Extract a profile-report bundle into a normalized JSON payload."
-    )
-    parser.add_argument("input_dir", help="Folder containing the sample PDFs and spreadsheets")
-    parser.add_argument(
-        "--output",
-        help="Optional JSON output path. If omitted, the payload is printed to stdout.",
-    )
-    args = parser.parse_args()
-
-    bundle = build_bundle(Path(args.input_dir))
-    payload = json.dumps(bundle, ensure_ascii=False, indent=2)
-
-    if args.output:
-        output_path = Path(args.output)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(payload, encoding="utf-8")
-        print(f"Wrote normalized bundle to {output_path.resolve()}")
-        return
-
-    print(payload)
-
-
-if __name__ == "__main__":
-    main()
+        "files": {key: str(va
