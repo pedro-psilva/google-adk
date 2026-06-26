@@ -4,6 +4,8 @@ from typing import Any
 
 from .bundle import ExpectedSignal, build_corpora, normalize_text, short_style_stem, text_contains_any
 
+KNOWN_PROFILER_STYLES = {"Executor", "Comunicador", "Planejador", "Analista"}
+
 DOMAIN_PATTERNS = {
     "Neuroticismo": ["preocup", "apreens", "tens", "estresse", "frustr", "agitad", "rispid"],
     "Extroversão": ["animad", "agitad", "ocup", "movimento", "comunic", "entusiasm"],
@@ -63,7 +65,12 @@ def build_expected_signals(bundle: dict[str, Any]) -> list[ExpectedSignal]:
         # dominant_style may be a multi-style label (e.g. "Comunicador Planejador").
         # Create one ExpectedSignal per individual style so coverage verification
         # checks that EACH named style appears in the generated text.
-        individual_styles = [s.strip() for s in dominant_style.split() if s.strip()]
+        # Only include tokens that are canonical Profiler style names; if none match
+        # (e.g. an unusual PDF produced a non-canonical label), fall back to a single
+        # signal for the full label string to avoid spurious required-signal failures.
+        individual_styles = [s.strip() for s in dominant_style.split() if s.strip() in KNOWN_PROFILER_STYLES]
+        if not individual_styles:
+            individual_styles = [dominant_style]
         for style_name in individual_styles:
             signals.append(
                 ExpectedSignal(
@@ -247,4 +254,17 @@ def analyze_coverage(bundle: dict[str, Any]) -> dict[str, Any]:
         },
         "required_signals": evaluated,
         "possible_medium_mentions": possible_medium_mentions,
-        "named_section_checks"
+        "named_section_checks": named_section_mismatches,
+        "notes": bundle.get("notes", []),
+    }
+
+
+def _check_named_section(section_text: str, expected_names: list[str]) -> dict[str, Any]:
+    normalized_text = normalize_text(section_text)
+    mentioned = [name for name in expected_names if normalize_text(name) in normalized_text]
+    missing = [name for name in expected_names if name not in mentioned]
+    return {
+        "expected": expected_names,
+        "mentioned": mentioned,
+        "missing": missing,
+    }

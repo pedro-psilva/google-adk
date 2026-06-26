@@ -577,14 +577,6 @@ def canonical_anchor_name(name: str) -> str:
         "Vontade de servir:": "Vontade de Servir",
         "Puro desafio:": "Puro Desafio",
         "Estilo de Vida:": "Estilo de Vida",
-        "Autonomia Independência": "Autonomia Independência",
-        "Segurança Estabilidade": "Segurança Estabilidade",
-        "Criatividade Empreendedora": "Criatividade Empreendedora",
-        "Técnico Funcional": "Técnico Funcional",
-        "Administrativo Geral": "Administrativo Geral",
-        "Vontade de Servir": "Vontade de Servir",
-        "Puro Desafio": "Puro Desafio",
-        "Estilo de Vida": "Estilo de Vida",
     }
     normalized = normalize_text(simplified)
     for candidate in aliases:
@@ -1003,4 +995,47 @@ def build_bundle(base_dir: Path) -> dict[str, Any]:
 
     return {
         "input_dir": str(base_dir.resolve()),
-        "files": {key: str(va
+        "files": {key: str(value.resolve()) for key, value in files.items() if value is not None},
+        "person": person,
+        "neopi": neopi_bundle,
+        "profiler": {
+            "scores": (report_workbook or {}).get("profiler_scores") or profiler_bundle.get("scores", []),
+            "dominant_style": (report_workbook or {}).get("dominant_profiler_style")
+            or profiler_bundle.get("dominant_style_from_pdf"),
+            "extended_pdf": profiler_bundle,
+        },
+        "career_anchors": anchor_bundle["career_anchors"],
+        "cultural_diagnosis": anchor_bundle["cultural_diagnosis"],
+        "report_template": {
+            "sections": (report_workbook or {}).get("sections") or generated_sections,
+        },
+        "notes": notes,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Extract a profile-report bundle into a normalized JSON payload."
+    )
+    parser.add_argument("input_dir", help="Folder containing the sample PDFs and spreadsheets")
+    parser.add_argument(
+        "--output",
+        help="Optional JSON output path. If omitted, the payload is printed to stdout.",
+    )
+    args = parser.parse_args()
+
+    bundle = build_bundle(Path(args.input_dir))
+    payload = json.dumps(bundle, ensure_ascii=False, indent=2)
+
+    if args.output:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(payload, encoding="utf-8")
+        print(f"Wrote normalized bundle to {output_path.resolve()}")
+        return
+
+    print(payload)
+
+
+if __name__ == "__main__":
+    main()
