@@ -72,6 +72,9 @@ def build_generation_payload(bundle: dict[str, Any], coverage: dict[str, Any]) -
         "profiler": {
             "dominant_style": bundle.get("profiler", {}).get("dominant_style"),
             "scores": bundle.get("profiler", {}).get("scores", []),
+            # Narrative pages extracted directly from the Profiler PDF (regular or extended).
+            # Use these as primary source for the section 3.2 prose.
+            "pdf_narrative": bundle.get("profiler", {}).get("extended_pdf", {}).get("long_form_sections", {}),
         },
         "career_anchors": bundle.get("career_anchors", {}),
         "cultural_diagnosis": bundle.get("cultural_diagnosis", {}),
@@ -109,7 +112,8 @@ def build_generation_payload(bundle: dict[str, Any], coverage: dict[str, Any]) -
         "- a secao de conclusao deve ser objetiva\n"
         "- se houver texto existente aproveitavel, pode reutilizar e reescrever\n"
         "- quando o estilo dominante do Profiler for composto (ex: 'Comunicador Planejador' ou 'Planejador Comunicador Analista'), mencione TODOS os estilos listados explicitamente na secao de Profiler; nao omita nenhum\n"
-        "- se as linhas de conclusao fornecidas como 'bullets' ja estiverem numeradas (padrao '1-', '2-' etc.), use-as como base principal da conclusao, reescrevendo em tom profissional mas preservando o conteudo\n\n"
+        "- na secao de Profiler, use o texto de 'pdf_narrative' como fonte principal; adapte o tom para corporativo e humanizado, mas preserve as caracteristicas comportamentais descritas no PDF\n"
+        "- a secao de conclusao deve ser deixada COMPLETAMENTE EM BRANCO: nao gere bullets nem paragrafos para ela (bullets: [], paragraphs: []); os avaliadores irao preenchê-la manualmente\n\n"
         "Orientacoes especificas para o NEO PI-R:\n"
         "- use o texto original como fonte principal e nao perca o sentido tecnico\n"
         "- transforme a linguagem para um tom profissional, claro e mais amigavel\n"
@@ -153,13 +157,14 @@ def build_template_fallback(bundle: dict[str, Any], coverage: dict[str, Any]) ->
     for item in coverage.get("required_signals", []):
         signal_map.setdefault(item["source_section"], []).append(item["signal_id"])
 
-    conclusion_lines = bundle.get("report_template", {}).get("sections", {}).get("conclusion", [])
-    conclusion_bullets = [line for line in conclusion_lines if normalize_text(line).startswith(tuple(str(i) for i in range(1, 10)))]
-    if not conclusion_bullets:
-        conclusion_bullets = [
-            "Consolidar os pontos fortes observados no perfil predominante.",
-            "Monitorar riscos de sobrecarga e dispersao quando houver excesso de demandas simultaneas.",
-        ]
+    # Conclusion is intentionally left blank for manual completion by assessors.
+    # Only keep custom (non auto-generated) lines written directly into the workbook.
+    raw_conclusion = bundle.get("report_template", {}).get("sections", {}).get("conclusion", [])
+    conclusion_bullets = [
+        line for line in raw_conclusion
+        if line and not _is_placeholder_line(normalize_text(str(line)))
+        and not normalize_text(str(line)).startswith(tuple(str(i) + "-" for i in range(1, 10)))
+    ]
 
     draft = DraftedReport(
         report_title=f"Analise de Perfil - {name}",
@@ -229,6 +234,26 @@ def _fallback_neopi_factor_summaries(bundle: dict[str, Any]) -> list[NeopiFactor
     return summaries
 
 
+# Substrings that identify placeholder or annotation lines injected by the Excel
+# template editor — these are instructions to the person filling the workbook,
+# not content that should appear in the generated report.
+_PLACEHOLDER_SUBSTRINGS: tuple[str, ...] = (
+    "o conteudo a ser inserido",  # "O conteúdo a ser inserido abaixo é esse acima."
+    "inserido abaixo",
+    "foi cortado",               # "O nome Hierárquica foi cortado."
+    "a ser inserido",
+)
+
+
+def _is_placeholder_line(normalized: str) -> bool:
+    """Return True if the line looks like a template instruction / annotation."""
+    if normalized.startswith("3.") or normalized.startswith("iv."):
+        return True
+    if normalized == "a partir dos indicadores de seu perfil, apresenta:":
+        return True
+    return any(sub in normalized for sub in _PLACEHOLDER_SUBSTRINGS)
+
+
 def _existing_or_fallback(bundle: dict[str, Any], section_name: str, fallback: list[str]) -> list[str]:
     raw = bundle.get("report_template", {}).get("sections", {}).get(section_name, [])
     if not raw:
@@ -236,7 +261,7 @@ def _existing_or_fallback(bundle: dict[str, Any], section_name: str, fallback: l
     cleaned = []
     for line in raw:
         normalized = normalize_text(str(line))
-        if normalized.startswith("3.") or normalized.startswith("iv.") or normalized == "a partir dos indicadores de seu perfil, apresenta:":
+        if _is_placeholder_line(normalized):
             continue
         cleaned.append(str(line))
     return cleaned or fallback

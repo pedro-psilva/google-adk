@@ -762,6 +762,11 @@ def _looks_like_report_workbook(workbook: Any) -> bool:
 def extract_profiler_extended(path: Path) -> dict[str, Any]:
     pages = extract_pdf_pages(path, engine="pdfplumber")
     page_two = pages[1] if len(pages) > 1 else ""
+    # Pages 4-6 (index 3-5): behavioral narrative — present in both regular (7pp)
+    # and extended (10+pp) report formats.
+    page_four = pages[3] if len(pages) > 3 else ""   # Leadership / profile isolated chart area
+    page_five = pages[4] if len(pages) > 4 else ""   # "Relacionando-se com os outros" + "Tomando decisões"
+    page_six = pages[5] if len(pages) > 5 else ""    # "Indicadores de competências" (regular) or behavior (extended)
     page_seven = pages[6] if len(pages) > 6 else ""
     page_eight = pages[7] if len(pages) > 7 else ""
 
@@ -776,6 +781,8 @@ def extract_profiler_extended(path: Path) -> dict[str, Any]:
 
     long_form_sections = {
         "page_2_overview": page_two,
+        "page_5_behavior": page_five,        # "Relacionando-se com os outros", "Tomando decisões"
+        "page_6_competencies": page_six,     # Competency indicators
         "page_7_management": page_seven,
         "page_8_sales_and_motivation": page_eight,
     }
@@ -784,7 +791,7 @@ def extract_profiler_extended(path: Path) -> dict[str, Any]:
         "pages": len(pages),
         "scores": profiler_scores,
         "dominant_style_from_pdf": dominant_style,
-        "long_form_sections": long_form_sections,
+        "long_form_sections": {k: v for k, v in long_form_sections.items() if v},
     }
 
 
@@ -904,31 +911,10 @@ def build_generated_conclusion_lines(
     top_cultures: list[dict[str, Any]],
     extreme_domains: list[dict[str, Any]],
 ) -> list[str]:
-    lines: list[str] = []
-    if dominant_style:
-        lines.append(f"Predominio do estilo {dominant_style} no contexto avaliado.")
-    if top_anchors:
-        lines.append("Ancoras mais presentes: " + ", ".join(item["name"] for item in top_anchors if item.get("name")) + ".")
-    if top_cultures:
-        lines.append(
-            "Maior aderencia cultural a "
-            + ", ".join(item["culture"] for item in top_cultures if item.get("culture"))
-            + "."
-        )
-    if extreme_domains:
-        lines.append(
-            "No NEO PI-R, destacam-se "
-            + ", ".join(
-                _format_domain_category_label(str(item["domain"]), str(item["category"]))
-                for item in extreme_domains
-                if item.get("domain") and item.get("category")
-            )
-            + "."
-        )
-    raw_lines = lines[:5]
-    # Prefix each line with a number so build_template_fallback can detect them
-    # as conclusion items (it checks for patterns like "1-", "2-" etc.).
-    return [f"{i + 1}- {line}" for i, line in enumerate(raw_lines)]
+    # The conclusion section is intentionally left blank so assessors can fill
+    # it in manually, or the Vertex AI model can generate a proper analytical
+    # synthesis without being anchored on mechanical bullet points.
+    return []
 
 
 def _format_domain_category_label(domain: str, category: str) -> str:

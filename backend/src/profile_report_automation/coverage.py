@@ -4,8 +4,6 @@ from typing import Any
 
 from .bundle import ExpectedSignal, build_corpora, normalize_text, short_style_stem, text_contains_any
 
-KNOWN_PROFILER_STYLES = {"Executor", "Comunicador", "Planejador", "Analista"}
-
 DOMAIN_PATTERNS = {
     "Neuroticismo": ["preocup", "apreens", "tens", "estresse", "frustr", "agitad", "rispid"],
     "Extroversão": ["animad", "agitad", "ocup", "movimento", "comunic", "entusiasm"],
@@ -62,30 +60,17 @@ def build_expected_signals(bundle: dict[str, Any]) -> list[ExpectedSignal]:
     profiler = bundle.get("profiler", {})
     dominant_style = profiler.get("dominant_style")
     if dominant_style:
-        # dominant_style may be a multi-style label (e.g. "Comunicador Planejador").
-        # Create one ExpectedSignal per individual style so coverage verification
-        # checks that EACH named style appears in the generated text.
-        # Only include tokens that are canonical Profiler style names; if none match
-        # (e.g. an unusual PDF produced a non-canonical label), fall back to a single
-        # signal for the full label string to avoid spurious required-signal failures.
-        individual_styles = [s.strip() for s in dominant_style.split() if s.strip() in KNOWN_PROFILER_STYLES]
-        if not individual_styles:
-            individual_styles = [dominant_style]
-        for style_name in individual_styles:
-            signals.append(
-                ExpectedSignal(
-                    signal_id=f"profiler:{normalize_text(style_name)}",
-                    signal_type="profiler",
-                    importance="required",
-                    name=style_name,
-                    source_section="profiler",
-                    patterns=[style_name, short_style_stem(style_name)],
-                    metadata={
-                        "scores": profiler.get("scores", []),
-                        "dominant_style": dominant_style,
-                    },
-                )
+        signals.append(
+            ExpectedSignal(
+                signal_id=f"profiler:{normalize_text(dominant_style)}",
+                signal_type="profiler",
+                importance="required",
+                name=dominant_style,
+                source_section="profiler",
+                patterns=[dominant_style, short_style_stem(dominant_style)],
+                metadata={"scores": profiler.get("scores", [])},
             )
+        )
 
     for anchor in bundle.get("career_anchors", {}).get("top_anchors", []):
         name = anchor["name"]

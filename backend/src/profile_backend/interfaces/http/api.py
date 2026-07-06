@@ -294,7 +294,7 @@ def _classify_uploaded_file(filename: str) -> str | None:
         return "bundle_json"
     if "neopi-r" in normalized or "neopi r" in normalized:
         return "neopi_pdf"
-    if normalized.endswith("extended.pdf") or "extended" in normalized:
+    if normalized.endswith("extended.pdf") or normalized.endswith("regular.pdf") or "extended" in normalized:
         return "profiler_pdf"
     if "relatorio de analise de perfil.xlsx" in normalized:
         return "report_workbook"
