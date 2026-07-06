@@ -36,8 +36,8 @@ LOGO_PADDING_PX = 24
 CHART_TEXT = "#111111"
 CHART_BORDER = "#b5b5b5"
 CHART_GRID = "#d0d0d0"
-ANCHOR_BAR_COLOR = "#7db3c8"
-CULTURE_LINE_COLOR = "#1b75bc"
+ANCHOR_BAR_COLOR = "#ff5a1f"
+CULTURE_LINE_COLOR = "#ff5a1f"
 SCALE = 3
 
 FONT_CANDIDATES = {
@@ -406,14 +406,16 @@ def _build_anchor_chart_image(scores: list[dict[str, Any]]) -> BytesIO:
 
 
 def _build_culture_chart_image(values: list[float]) -> BytesIO:
-    width = 276 * SCALE
+    # Widened canvas (was 276) and re-centered so the left "Hierárquica"
+    # label is no longer clipped at the edge.
+    width = 300 * SCALE
     height = 222 * SCALE
     image, draw = _new_chart_canvas(width, height)
 
     label_font = _load_font(9 * SCALE)
     axis_font = _load_font(8 * SCALE)
 
-    center_x = 132 * SCALE
+    center_x = 150 * SCALE
     center_y = 104 * SCALE
     radius = 76 * SCALE
     max_value = 40.0

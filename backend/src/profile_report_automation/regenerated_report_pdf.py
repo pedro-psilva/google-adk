@@ -42,8 +42,8 @@ PROFILER_COLORS = {
     "Planejador": colors.HexColor("#2e7d32"),
     "Analista": colors.HexColor("#0f6fb6"),
 }
-ANCHOR_BAR_COLOR = colors.HexColor("#7db3c8")
-CULTURE_LINE_COLOR = colors.HexColor("#1b75bc")
+ANCHOR_BAR_COLOR = colors.HexColor("#ff5a1f")
+CULTURE_LINE_COLOR = colors.HexColor("#ff5a1f")
 CULTURE_ORDER = ["Clã", "Inovativa", "Mercado", "Hierárquica"]
 
 METHODOLOGY_TEXT = (
