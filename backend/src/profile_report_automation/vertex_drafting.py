@@ -84,7 +84,11 @@ def build_generation_payload(bundle: dict[str, Any], coverage: dict[str, Any]) -
             "synthesis_by_domain": bundle.get("neopi", {}).get("synthesis_by_domain", {}),
             "friendly_synthesis_by_domain": bundle.get("neopi", {}).get("friendly_synthesis_by_domain", {}),
         },
-        "existing_sections": bundle.get("report_template", {}).get("sections", {}),
+        # Clean placeholder/annotation lines before sending to the AI so the model
+        # does not echo instruction text back into the generated prose.
+        "existing_sections": _clean_sections_for_payload(
+            bundle.get("report_template", {}).get("sections", {})
+        ),
     }
 
     system_instruction = (
@@ -252,6 +256,22 @@ def _is_placeholder_line(normalized: str) -> bool:
     if normalized == "a partir dos indicadores de seu perfil, apresenta:":
         return True
     return any(sub in normalized for sub in _PLACEHOLDER_SUBSTRINGS)
+
+
+def _clean_section_lines(lines: list) -> list[str]:
+    """Remove placeholder/annotation lines from a section line list."""
+    return [
+        str(line) for line in lines
+        if line and not _is_placeholder_line(normalize_text(str(line)))
+    ]
+
+
+def _clean_sections_for_payload(sections: dict) -> dict:
+    """Return a copy of the sections dict with all placeholder lines stripped."""
+    return {
+        key: _clean_section_lines(value) if isinstance(value, list) else value
+        for key, value in sections.items()
+    }
 
 
 def _existing_or_fallback(bundle: dict[str, Any], section_name: str, fallback: list[str]) -> list[str]:

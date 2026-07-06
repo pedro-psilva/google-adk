@@ -7,7 +7,6 @@ import logging
 import re
 import shutil
 import unicodedata
-from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -36,25 +35,8 @@ from profile_backend.infrastructure.storage_paths import (
     uploads_root,
 )
 
+app = FastAPI(title=settings.app_name, version="0.1.0")
 LOGGER = logging.getLogger(__name__)
-
-
-@asynccontextmanager
-async def _lifespan(application: FastAPI):  # noqa: ARG001
-    """FastAPI lifespan: start artifact cleanup loop on startup, cancel on shutdown."""
-    cleanup_task: asyncio.Task | None = None
-    if settings.artifact_cleanup_enabled:
-        await asyncio.to_thread(cleanup_managed_artifacts)
-        cleanup_task = asyncio.create_task(_artifact_cleanup_loop())
-        application.state.artifact_cleanup_task = cleanup_task
-    yield
-    if cleanup_task is not None:
-        cleanup_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await cleanup_task
-
-
-app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=_lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -224,6 +206,25 @@ def download_generated_file(path: str = Query(..., min_length=1)) -> FileRespons
     )
 
 
+@app.on_event("startup")
+async def startup_artifact_cleanup() -> None:
+    if not settings.artifact_cleanup_enabled:
+        return
+
+    await asyncio.to_thread(cleanup_managed_artifacts)
+    app.state.artifact_cleanup_task = asyncio.create_task(_artifact_cleanup_loop())
+
+
+@app.on_event("shutdown")
+async def shutdown_artifact_cleanup() -> None:
+    cleanup_task = getattr(app.state, "artifact_cleanup_task", None)
+    if cleanup_task is None:
+        return
+    cleanup_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await cleanup_task
+
+
 def _normalize_text(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
     without_marks = "".join(ch for ch in normalized if not unicodedata.combining(ch))
@@ -294,7 +295,7 @@ def _classify_uploaded_file(filename: str) -> str | None:
         return "bundle_json"
     if "neopi-r" in normalized or "neopi r" in normalized:
         return "neopi_pdf"
-    if normalized.endswith("extended.pdf") or normalized.endswith("regular.pdf") or "extended" in normalized:
+    if normalized.endswith("extended.pdf") or "extended" in normalized:
         return "profiler_pdf"
     if "relatorio de analise de perfil.xlsx" in normalized:
         return "report_workbook"
