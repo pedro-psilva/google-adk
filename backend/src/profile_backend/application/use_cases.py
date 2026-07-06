@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from profile_backend.application.ports import (
@@ -10,6 +11,8 @@ from profile_backend.application.ports import (
 )
 from profile_backend.domain.models import PipelineArtifacts, PipelineRequest, PipelineResult
 from profile_report_automation.report_exports import export_local_reports
+
+LOGGER = logging.getLogger(__name__)
 
 
 def run_pipeline(
@@ -30,11 +33,24 @@ def run_pipeline(
     preview = drafting_gateway.build_preview(resolved_bundle.bundle, coverage)
     preview_path = storage_gateway.save(output_dir / "vertex-request-preview.json", preview)
 
+    notes = list(coverage.get("notes", []))
+
     if request.draft_mode == "live":
-        draft = drafting_gateway.build_live(resolved_bundle.bundle, coverage)
-        live_draft_path = storage_gateway.save(output_dir / "draft-vertex.json", draft)
-        draft_path = live_draft_path
-        used_live_vertex = True
+        try:
+            draft = drafting_gateway.build_live(resolved_bundle.bundle, coverage)
+            live_draft_path = storage_gateway.save(output_dir / "draft-vertex.json", draft)
+            draft_path = live_draft_path
+            used_live_vertex = True
+        except Exception as exc:  # noqa: BLE001 - degrade gracefully but stay transparent
+            LOGGER.exception("Live Vertex drafting failed; falling back to local template.")
+            draft = drafting_gateway.build_template(resolved_bundle.bundle, coverage)
+            draft_path = storage_gateway.save(output_dir / "draft-template.json", draft)
+            live_draft_path = None
+            used_live_vertex = False
+            notes.append(
+                "Vertex AI indisponivel nesta execucao; texto gerado pelo template local. "
+                f"Detalhe: {exc}"
+            )
     else:
         draft = drafting_gateway.build_template(resolved_bundle.bundle, coverage)
         draft_path = storage_gateway.save(output_dir / "draft-template.json", draft)
@@ -63,7 +79,7 @@ def run_pipeline(
             live_draft=str(live_draft_path.resolve()) if live_draft_path else None,
         ),
         used_live_vertex=used_live_vertex,
-        notes=coverage.get("notes", []),
+        notes=notes,
     )
     storage_gateway.save(output_dir / "run-summary.json", _result_to_dict(result))
     return result

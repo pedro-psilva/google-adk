@@ -343,22 +343,28 @@ def _build_profiler_chart_image(scores: list[dict[str, Any]]) -> BytesIO:
 
 
 def _build_anchor_chart_image(scores: list[dict[str, Any]]) -> BytesIO:
+    # row_height must accommodate 2-line labels without overlap.
+    # With a 7*SCALE font (~20px tall) and label_line_height=9*SCALE (27px),
+    # a 2-line label spans ~54px. row_height=18*SCALE (54px) gives a clean gap
+    # between consecutive rows.
+    row_height = 18 * SCALE
+    bar_height = 9 * SCALE
+    label_line_height = 9 * SCALE        # line spacing inside a multi-line label
+    chart_left = 140 * SCALE
+    chart_bottom = 52 * SCALE            # top of chart area in PIL coords
+    chart_width = 170 * SCALE
+    chart_height = 8 * row_height        # exactly 8 anchor rows
+    chart_top = chart_bottom + chart_height
+    max_value = 6.0
+
     width = 392 * SCALE
-    height = 188 * SCALE
+    # height: chart area + axis labels (14*SCALE text + 10*SCALE margin)
+    height = chart_top + 28 * SCALE
     image, draw = _new_chart_canvas(width, height)
 
     label_font = _load_font(7 * SCALE)
-    axis_font = _load_font(8 * SCALE)
-    value_font = _load_font(8 * SCALE)
-
-    chart_left = 140 * SCALE
-    chart_bottom = 46 * SCALE
-    chart_width = 170 * SCALE
-    chart_height = 104 * SCALE
-    chart_top = chart_bottom + chart_height
-    max_value = 6.0
-    row_height = 12 * SCALE
-    bar_height = 8 * SCALE
+    axis_font = _load_font(7 * SCALE)
+    value_font = _load_font(7 * SCALE)
 
     for tick in range(0, 7):
         tick_x = chart_left + ((chart_width / max_value) * tick)
@@ -371,10 +377,13 @@ def _build_anchor_chart_image(scores: list[dict[str, Any]]) -> BytesIO:
         value = float(item.get("average") or 0.0)
         row_y = chart_bottom + (index * row_height)
         label_lines = _wrap_anchor_label(str(item.get("name") or "")).splitlines()
-        label_height = len(label_lines) * 8 * SCALE
+        label_height = len(label_lines) * label_line_height
         label_y = row_y + (bar_height / 2) - (label_height / 2)
         for offset, line in enumerate(label_lines):
-            _draw_right_text(draw, chart_left - 12 * SCALE, label_y + (offset * 8 * SCALE), line, label_font, CHART_TEXT)
+            _draw_right_text(
+                draw, chart_left - 10 * SCALE, label_y + (offset * label_line_height),
+                line, label_font, CHART_TEXT,
+            )
 
         bar_width = chart_width * (value / max_value)
         draw.rectangle(
@@ -388,7 +397,10 @@ def _build_anchor_chart_image(scores: list[dict[str, Any]]) -> BytesIO:
             outline=CHART_TEXT,
             width=2,
         )
-        _draw_text(draw, chart_left + bar_width + 6 * SCALE, row_y - 1 * SCALE, _format_decimal(value), value_font, CHART_TEXT)
+        val_text = _format_decimal(value)
+        _, _vt, _, _vb = draw.textbbox((0, 0), val_text, font=value_font)
+        val_top = row_y + (bar_height - (_vb - _vt)) // 2 - _vt
+        _draw_text(draw, chart_left + bar_width + 5 * SCALE, val_top, val_text, value_font, CHART_TEXT)
 
     return _image_to_stream(image)
 

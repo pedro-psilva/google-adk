@@ -215,6 +215,7 @@ export function WorkflowPage() {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [lastAction, setLastAction] = useState("Aguardando arquivos");
   const [error, setError] = useState<string | null>(null);
+  const [useAiDrafting, setUseAiDrafting] = useState(true);
   const apiBaseUrl = import.meta.env.DEV ? "" : (import.meta.env.VITE_API_BASE_URL ?? "");
 
   async function runAction<T>(actionKey: string, callback: () => Promise<T>): Promise<T | null> {
@@ -281,6 +282,7 @@ export function WorkflowPage() {
       const pipeline = await runPipeline(apiBaseUrl, {
         bundleInput: uploaded.bundle_input,
         outputDir: uploaded.output_dir,
+        draftMode: useAiDrafting ? "live" : "preview",
       });
       const [bundlePayload, coveragePayload, draftPayload] = await Promise.all([
         loadJsonArtifact<BundleResponse>(apiBaseUrl, pipeline.bundle_path),
@@ -414,6 +416,14 @@ export function WorkflowPage() {
           <Button busy={busyAction === "Análise gerada"} disabled={!canRunAutomation} onClick={() => void handleRunAutomation()}>
             Gerar análise
           </Button>
+          <label className="workflow-actions__toggle">
+            <input
+              type="checkbox"
+              checked={useAiDrafting}
+              onChange={(event) => setUseAiDrafting(event.target.checked)}
+            />
+            <span>Gerar textos com IA (Vertex AI)</span>
+          </label>
         </div>
 
         {!canRunAutomation ? (

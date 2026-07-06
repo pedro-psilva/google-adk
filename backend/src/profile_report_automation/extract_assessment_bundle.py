@@ -540,6 +540,28 @@ def extract_profiler_scores(ws: Any) -> list[dict[str, Any]]:
     return items
 
 
+def compute_dominant_style_label(scores: list[dict[str, Any]], threshold_pct: float = 6.0) -> str | None:
+    """Return the dominant style label, combining multiple styles when scores are close.
+
+    When the second-highest style is within *threshold_pct* percentage points of the
+    top score, it is included in the label. Styles are always ordered canonically
+    (Executor → Comunicador → Planejador → Analista) regardless of score rank.
+    """
+    if not scores:
+        return None
+    style_order = ["Executor", "Comunicador", "Planejador", "Analista"]
+    sorted_scores = sorted(scores, key=lambda x: x["percentage"], reverse=True)
+    top_pct = sorted_scores[0]["percentage"]
+    dominant_names: list[str] = [sorted_scores[0]["style"]]
+    for item in sorted_scores[1:]:
+        if (top_pct - item["percentage"]) <= threshold_pct:
+            dominant_names.append(item["style"])
+        else:
+            break
+    dominant_names.sort(key=lambda s: style_order.index(s) if s in style_order else 99)
+    return " ".join(dominant_names)
+
+
 def canonical_anchor_name(name: str) -> str:
     simplified = clean_text(name).replace("\n", " ")
     simplified = re.sub(r"\s+", " ", simplified).strip()
@@ -555,14 +577,6 @@ def canonical_anchor_name(name: str) -> str:
         "Vontade de servir:": "Vontade de Servir",
         "Puro desafio:": "Puro Desafio",
         "Estilo de Vida:": "Estilo de Vida",
-        "Autonomia Independência": "Autonomia Independência",
-        "Segurança Estabilidade": "Segurança Estabilidade",
-        "Criatividade Empreendedora": "Criatividade Empreendedora",
-        "Técnico Funcional": "Técnico Funcional",
-        "Administrativo Geral": "Administrativo Geral",
-        "Vontade de Servir": "Vontade de Servir",
-        "Puro Desafio": "Puro Desafio",
-        "Estilo de Vida": "Estilo de Vida",
     }
     normalized = normalize_text(simplified)
     for candidate in aliases:
@@ -614,7 +628,7 @@ def extract_report_workbook(path: Path) -> dict[str, Any]:
     }
 
     profiler_scores = extract_profiler_scores(profiler_ws)
-    dominant_profiler = max(profiler_scores, key=lambda item: item["percentage"]) if profiler_scores else None
+    dominant_profiler_label = compute_dominant_style_label(profiler_scores)
 
     culture_scores: list[dict[str, Any]] = []
     for row in range(3, 7):
@@ -638,7 +652,7 @@ def extract_report_workbook(path: Path) -> dict[str, Any]:
             "demand": extract_prefixed_value(summary_ws, "Demanda:"),
         },
         "profiler_scores": profiler_scores,
-        "dominant_profiler_style": dominant_profiler["style"] if dominant_profiler else None,
+        "dominant_profiler_style": dominant_profiler_label,
         "cultural_scores_from_template": culture_scores,
         "sections": sections,
         "notes": extract_report_anchor_notes(anchor_input_ws),
@@ -748,17 +762,27 @@ def _looks_like_report_workbook(workbook: Any) -> bool:
 def extract_profiler_extended(path: Path) -> dict[str, Any]:
     pages = extract_pdf_pages(path, engine="pdfplumber")
     page_two = pages[1] if len(pages) > 1 else ""
+    # Pages 4-6 (index 3-5): behavioral narrative — present in both regular (7pp)
+    # and extended (10+pp) report formats.
+    page_four = pages[3] if len(pages) > 3 else ""   # Leadership / profile isolated chart area
+    page_five = pages[4] if len(pages) > 4 else ""   # "Relacionando-se com os outros" + "Tomando decisões"
+    page_six = pages[5] if len(pages) > 5 else ""    # "Indicadores de competências" (regular) or behavior (extended)
     page_seven = pages[6] if len(pages) > 6 else ""
     page_eight = pages[7] if len(pages) > 7 else ""
 
-    dominant_match = re.search(r"Neste momento, .* está:\s*([A-Za-zÀ-ÿ]+)\s+em", page_two)
-    dominant_style = dominant_match.group(1) if dominant_match else None
+    dominant_match = re.search(
+        r"Neste momento,.*?está:\s*((?:[A-Za-zÀ-ÿ]+\s*)+?)\s+em\b",
+        page_two, flags=re.DOTALL,
+    )
+    dominant_style = dominant_match.group(1).strip() if dominant_match else None
     profiler_scores = extract_profiler_scores_from_extended(page_two)
     if not dominant_style and profiler_scores:
-        dominant_style = max(profiler_scores, key=lambda item: item["percentage"])["style"]
+        dominant_style = compute_dominant_style_label(profiler_scores)
 
     long_form_sections = {
         "page_2_overview": page_two,
+        "page_5_behavior": page_five,        # "Relacionando-se com os outros", "Tomando decisões"
+        "page_6_competencies": page_six,     # Competency indicators
         "page_7_management": page_seven,
         "page_8_sales_and_motivation": page_eight,
     }
@@ -767,7 +791,7 @@ def extract_profiler_extended(path: Path) -> dict[str, Any]:
         "pages": len(pages),
         "scores": profiler_scores,
         "dominant_style_from_pdf": dominant_style,
-        "long_form_sections": long_form_sections,
+        "long_form_sections": {k: v for k, v in long_form_sections.items() if v},
     }
 
 
@@ -869,6 +893,11 @@ def build_generated_profiler_paragraph(dominant_style: str) -> str:
         "Planejador": "Costuma atuar com prudencia, consistencia e preferencia por previsibilidade na execucao.",
         "Analista": "Tende a priorizar profundidade, criterio e qualidade tecnica nas entregas.",
     }
+    # For multi-style labels (e.g. "Comunicador Planejador"), combine each style's
+    # individual description so all named styles are represented in the paragraph.
+    individual_styles = [s.strip() for s in dominant_style.split() if s.strip() in summaries]
+    if individual_styles:
+        return " ".join(summaries[s] for s in individual_styles)
     return summaries.get(
         dominant_style,
         "O estilo predominante contribui para a leitura do comportamento no contexto profissional.",
@@ -882,28 +911,10 @@ def build_generated_conclusion_lines(
     top_cultures: list[dict[str, Any]],
     extreme_domains: list[dict[str, Any]],
 ) -> list[str]:
-    lines: list[str] = []
-    if dominant_style:
-        lines.append(f"Predominio do estilo {dominant_style} no contexto avaliado.")
-    if top_anchors:
-        lines.append("Ancoras mais presentes: " + ", ".join(item["name"] for item in top_anchors if item.get("name")) + ".")
-    if top_cultures:
-        lines.append(
-            "Maior aderencia cultural a "
-            + ", ".join(item["culture"] for item in top_cultures if item.get("culture"))
-            + "."
-        )
-    if extreme_domains:
-        lines.append(
-            "No NEO PI-R, destacam-se "
-            + ", ".join(
-                _format_domain_category_label(str(item["domain"]), str(item["category"]))
-                for item in extreme_domains
-                if item.get("domain") and item.get("category")
-            )
-            + "."
-        )
-    return lines[:5]
+    # The conclusion section is intentionally left blank so assessors can fill
+    # it in manually, or the Vertex AI model can generate a proper analytical
+    # synthesis without being anchored on mechanical bullet points.
+    return []
 
 
 def _format_domain_category_label(domain: str, category: str) -> str:
